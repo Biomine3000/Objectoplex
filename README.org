@@ -7,3 +7,7 @@
   then: =hg clone https://bitbucket.org/denis/gevent= and run
   =python setup.py install= (you might need to install *cython* to get the
   extension to build).
+** Usage
+   The server is called =objectoplex= and the client is =text_client=.  Both
+   of them respond to =-h= or =--help= for help.  Customary testing host is
+   *localhost* and port is *7890*.
