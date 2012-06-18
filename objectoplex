@@ -1,0 +1,138 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+from __future__ import print_function
+
+import sys
+import logging
+import traceback
+import codecs
+import signal
+import errno
+import socket
+
+from optparse import OptionParser
+from pprint import pprint
+from socket import SHUT_RDWR
+from Queue import Queue
+
+import gevent
+
+from gevent.server import StreamServer
+from gevent import Greenlet
+from gevent.select import select
+
+from system import BusinessObject, ObjectType
+
+logger = logging.getLogger("objectoplex")
+u8 = codecs.getwriter('utf-8')(sys.stdout)
+
+def p8(*args, **kwargs):
+    if 'file' not in kwargs:
+        kwargs['file'] = u8
+    return print(*args, **kwargs)
+
+class WaitReadTimeout(Exception): pass
+class WaitWriteTimeout(Exception): pass
+
+class SystemClient(Greenlet):
+    def __init__(self, socket, address, gateway):
+        Greenlet.__init__(self)
+
+        self.socket = socket
+        self.address = address
+        self.gateway = gateway
+
+        self.queue = Queue()
+
+    def _run(self):
+        logger.info(u"Handling client from {0}".format(self.address))
+
+        while True:
+            if not self.queue.empty():
+                try:
+                    gevent.socket.wait_write(self.socket.fileno(),
+                                             timeout=5, timeout_exc=WaitWriteTimeout())
+                    self.socket.send(self.queue.get().serialize())
+                except WaitWriteTimeout, t:
+                    try:
+                        self.close()
+                        return
+                    except:
+                        pass
+
+            try:
+                gevent.socket.wait_read(self.socket.fileno(), timeout=1,
+                                        timeout_exc=WaitReadTimeout())
+
+                try:
+                    obj = BusinessObject.read_from_socket(self.socket)
+                    self.gateway.send(self, obj)
+                except socket.error, e:
+                    if e[0] == errno.ECONNRESET:
+                        logger.warning(u"Received {0} from {1}".format(e, self.address))
+                        self.close()
+                        return
+                    raise e
+            except WaitReadTimeout, t:
+                pass
+
+    def send(self, client, message):
+        self.queue.put(message)
+
+    def close(self):
+        try:
+            logger.warning(u"Closing connection to {0}".format(self.address))
+            self.gateway.unregister(self)
+            self.socket.close()
+        except:
+            pass
+
+
+class ObjectoPlex(StreamServer):
+    def __init__(self, listener, **kwargs):
+        StreamServer.__init__(self, listener, **kwargs)
+        self.clients = []
+
+    def handle(self, source, address):
+        client = SystemClient(source, address, self)
+        gevent.signal(signal.SIGTERM, client.kill)
+        gevent.signal(signal.SIGINT, client.kill)
+        self.clients.append(client)
+        client.start()
+
+    def send(self, client, message):
+        logger.info(u"{0}: {1}".format(client, message))
+
+        # middleware entry point; should be registered on start to ObjectoPlex
+
+        for to_client in self.clients:
+            to_client.send(client, message)
+
+    def unregister(self, client):
+        # TODO: actually remove from clients; leaks memory right now
+        pass
+
+
+def main():
+    parser = OptionParser()
+    parser.add_option("-d", "--debug", action="store_true", dest="debug", default=False,
+                      help="don't print status messages to stdout")
+    opts, args = parser.parse_args()
+
+    if opts.debug:
+        logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
+
+    server = ObjectoPlex(("0.0.0.0", 7890))
+    logger.info('Starting server at %s:%s', *(server.address[:2]))
+    gevent.signal(signal.SIGTERM, server.close)
+    gevent.signal(signal.SIGINT, server.close)
+    server.start()
+    gevent.run()
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except KeyError, ke:
+        logger.info("Exiting.")

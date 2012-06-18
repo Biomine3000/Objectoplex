@@ -1,0 +1,10 @@
+* objectoplex, a Python Object System server with super alligator capabilities
+** Environment setup
+   - virtualenv env
+   - source env/bin/activate
+   - pip install -r requirements.txt
+  gevent might not install on your system, get it by cloning from Mercurial
+  then: hg clone https://bitbucket.org/denis/gevent and run
+  python setup.py install (you might need to install cython to get the
+  extension to build.
+

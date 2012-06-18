@@ -1,0 +1,55 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+from __future__ import print_function
+
+import sys
+import logging
+import socket
+import codecs
+
+from optparse import OptionParser
+
+from system import BusinessObject
+
+u8 = codecs.getwriter('utf-8')(sys.stdout)
+logger = logging.getLogger('text_client')
+
+def main():
+    parser = OptionParser()
+    parser.add_option("-d", "--debug", action="store_true", dest="debug", default=False,
+                      help="don't print status messages to stdout")
+    parser.add_option("--listen", dest="listen", default=False, action="store_true")
+
+    parser.add_option("--host", dest="host", default="localhost")
+    parser.add_option("--port", dest="port", default=7890, type="int")
+   
+    opts, args = parser.parse_args()
+
+    if opts.debug:
+        logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
+
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.connect((opts.host, opts.port))
+
+    if not opts.listen:
+        metadata = {'type': 'text/plain; charset=UTF-8',
+                    'size': len(args[0])}
+        msg = BusinessObject(metadata, args[0])
+        sock.sendall(msg.serialize())
+        sock.close()
+        return
+
+    try:
+        while True:
+            obj = BusinessObject.read_from_socket(sock)
+            print(unicode(obj), file=u8)
+    except KeyboardInterrupt, kbi:
+        sock.close()
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except KeyError, ke:
+        logger.info("Exiting.")
