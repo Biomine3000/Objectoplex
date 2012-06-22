@@ -52,7 +52,7 @@ class SystemClient(Greenlet):
         while True:
             if not self.queue.empty():
                 try:
-                    logger.debug(u"Waiting to write to socket...")
+                    logger.debug(u"Waiting to write to {0}...".format(self.socket))
                     gevent.socket.wait_write(self.socket.fileno(),
                                              timeout=5, timeout_exc=WaitWriteTimeout('wait_write'))
                     self.socket.send(self.queue.get().serialize())
