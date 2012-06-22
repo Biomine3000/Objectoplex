@@ -52,7 +52,7 @@ class SystemClient(Greenlet):
         while True:
             if not self.queue.empty():
                 try:
-                    # logger.debug(u"Going to wait_write")
+                    logger.debug(u"Waiting to write to socket...")
                     gevent.socket.wait_write(self.socket.fileno(),
                                              timeout=5, timeout_exc=WaitWriteTimeout('wait_write'))
                     self.socket.send(self.queue.get().serialize())
@@ -66,18 +66,16 @@ class SystemClient(Greenlet):
                         logger.debug(u"Stale pass {0}".format(e))
 
             try:
-                # logger.debug(u"Going to wait_read")
                 gevent.socket.wait_read(self.socket.fileno(), timeout=1,
                                         timeout_exc=WaitReadTimeout('wait_read'))
-                logger.debug(u"Out of wait_read")
+                logger.debug(u"Attempting to read an object from {0}".format(self.socket))
                 try:
-                    logger.debug(u"Going to read_from_socket; socket status: {0}".format(self.socket))
                     obj = BusinessObject.read_from_socket(self.socket)
                     if obj is None:
-                        logger.debug(u"Couldn't read object from {0}, closing!".format(self.socket))
+                        logger.error(u"Couldn't read object from {0}, closing!".format(self.socket))
                         self.close()
                         return
-                    logger.debug(u"Out of read_from_socket; socket status: {0}".format(self.socket))
+                    logger.debug(u"Successfully read object {0}".format(str(obj)))
                     self.gateway.send(self, obj)
                 except socket.error, e:
                     if e[0] == errno.ECONNRESET:
@@ -87,7 +85,6 @@ class SystemClient(Greenlet):
                     raise e
             except WaitReadTimeout, t:
                 pass
-                # logger.warning(u"Received {0} from {1}".format(t, self.address))
 
     def send(self, client, message):
         self.queue.put(message)
