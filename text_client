@@ -15,6 +15,8 @@ from system import BusinessObject
 u8 = codecs.getwriter('utf-8')(sys.stdout)
 logger = logging.getLogger('text_client')
 
+class InvalidObject(Exception): pass
+
 def main():
     parser = OptionParser()
     parser.add_option("-d", "--debug", action="store_true", dest="debug", default=False,
@@ -46,8 +48,13 @@ def main():
             rlist, wlist, xlist = select.select([sock], [], [], 1)
             if len(rlist) > 0:
                 obj = BusinessObject.read_from_socket(sock)
+                if obj is None:
+                    raise InvalidObject
                 print(unicode(obj), file=u8)
     except KeyboardInterrupt, kbi:
+        sock.close()
+    except InvalidObject, io:
+        logger.error("Received invalid object; bailing out!")
         sock.close()
 
 
