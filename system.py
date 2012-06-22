@@ -2,16 +2,19 @@
 # -*- coding: utf-8 -*-
 from __future__ import print_function
 
+import logging
 import json
 import re
 
 from email.utils import make_msgid
 
+logger = logging.getLogger("system")
+
 def read_until_nul(socket):
     ret = []
     while True:
         c = socket.recv(1)
-        if c == '\x00':
+        if len(c) == 0 or c == '\x00':
             break
         ret.append(c)
 
@@ -94,7 +97,11 @@ class BusinessObject(object):
     @classmethod
     def read_from_socket(cls, socket):
         metadata = read_until_nul(socket)
-        metadata_dict = json.loads(metadata)
+        try:
+            metadata_dict = json.loads(metadata)
+        except ValueError, ve:
+            logger.warning("Couldn't load JSON from '%s'" % metadata)
+            return None
 
         if 'size' in metadata_dict and metadata_dict['size'] > 0:
             payload = socket.recv(metadata_dict['size'])

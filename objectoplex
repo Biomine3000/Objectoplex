@@ -13,6 +13,7 @@ import socket
 from optparse import OptionParser
 from pprint import pprint
 from socket import SHUT_RDWR
+from datetime import datetime, timedelta
 from Queue import Queue
 
 import gevent
@@ -25,6 +26,7 @@ from system import BusinessObject, ObjectType
 
 logger = logging.getLogger("objectoplex")
 u8 = codecs.getwriter('utf-8')(sys.stdout)
+
 
 def p8(*args, **kwargs):
     if 'file' not in kwargs:
@@ -50,22 +52,32 @@ class SystemClient(Greenlet):
         while True:
             if not self.queue.empty():
                 try:
+                    # logger.debug(u"Going to wait_write")
                     gevent.socket.wait_write(self.socket.fileno(),
-                                             timeout=5, timeout_exc=WaitWriteTimeout())
+                                             timeout=5, timeout_exc=WaitWriteTimeout('wait_write'))
                     self.socket.send(self.queue.get().serialize())
+                    last_activity = datetime.now()
                 except WaitWriteTimeout, t:
                     try:
+                        logger.warning(u"Received {0} from {1}".format(t, self.address))
                         self.close()
                         return
-                    except:
-                        pass
+                    except Exception, e:
+                        logger.debug(u"Stale pass {0}".format(e))
 
             try:
+                # logger.debug(u"Going to wait_read")
                 gevent.socket.wait_read(self.socket.fileno(), timeout=1,
-                                        timeout_exc=WaitReadTimeout())
-
+                                        timeout_exc=WaitReadTimeout('wait_read'))
+                logger.debug(u"Out of wait_read")
                 try:
+                    logger.debug(u"Going to read_from_socket; socket status: {0}".format(self.socket))
                     obj = BusinessObject.read_from_socket(self.socket)
+                    if obj is None:
+                        logger.debug(u"Couldn't read object from {0}, closing!".format(self.socket))
+                        self.close()
+                        return
+                    logger.debug(u"Out of read_from_socket; socket status: {0}".format(self.socket))
                     self.gateway.send(self, obj)
                 except socket.error, e:
                     if e[0] == errno.ECONNRESET:
@@ -75,6 +87,7 @@ class SystemClient(Greenlet):
                     raise e
             except WaitReadTimeout, t:
                 pass
+                # logger.warning(u"Received {0} from {1}".format(t, self.address))
 
     def send(self, client, message):
         self.queue.put(message)

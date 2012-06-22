@@ -6,6 +6,7 @@ import sys
 import logging
 import socket
 import codecs
+import select
 
 from optparse import OptionParser
 
@@ -42,8 +43,10 @@ def main():
 
     try:
         while True:
-            obj = BusinessObject.read_from_socket(sock)
-            print(unicode(obj), file=u8)
+            rlist, wlist, xlist = select.select([sock], [], [], 1)
+            if len(rlist) > 0:
+                obj = BusinessObject.read_from_socket(sock)
+                print(unicode(obj), file=u8)
     except KeyboardInterrupt, kbi:
         sock.close()
 
