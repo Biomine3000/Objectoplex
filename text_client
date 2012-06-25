@@ -20,7 +20,7 @@ class InvalidObject(Exception): pass
 def main():
     parser = OptionParser()
     parser.add_option("-d", "--debug", action="store_true", dest="debug", default=False,
-                      help="don't print status messages to stdout")
+                      help="logging level DEBUG")
     parser.add_option("--listen", dest="listen", default=False, action="store_true")
 
     parser.add_option("--host", dest="host", default="localhost")
@@ -36,11 +36,13 @@ def main():
     sock.connect((opts.host, opts.port))
 
     if not opts.listen:
+        logger.debug("Trying to send a plaintext message...")
         metadata = {'type': 'text/plain; charset=UTF-8',
                     'size': len(args[0])}
         msg = BusinessObject(metadata, args[0])
         sock.sendall(msg.serialize())
         sock.close()
+        logger.debug(u"Sent {0}".format(msg))
         return
 
     try:
