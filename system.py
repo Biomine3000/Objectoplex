@@ -72,17 +72,26 @@ class BusinessObject(object):
         else:
             self.payload_size = 0
 
-        self.content_type = ObjectType.from_string(metadata_dict['type'])
+        if 'type' in metadata_dict:
+            self.content_type = ObjectType.from_string(metadata_dict['type'])
+        else:
+            self.content_type = None
+
+        self.event = metadata_dict.get('event', None)
 
     def __unicode__(self):
         if self.content_type.content_type == 'text':
+            type_event_snippet = unicode(self.content_type)
+            if self.event is not None:
+                type_event_snippet += "; %s" % self.event
+            
             charset = self.content_type.charset
             if not charset:
                 charset = 'UTF-8'
             out_payload = self.payload.decode(charset).encode('ASCII', 'backslashreplace')
-            if len(out_payload) > 80:
-                out_payload = out_payload[:77] + '...'
-            return u'<{0} {1} "{2}">'.format(self.__class__.__name__, self.content_type,
+            if len(out_payload) > 120:
+                out_payload = out_payload[:117] + '...'
+            return u'<{0} {1} "{2}">'.format(self.__class__.__name__, type_event_snippet,
                                              out_payload.replace('\n', ' '))
         else:
             return u'<{0} {1}>'.format(self.__class__.__name__, self.content_type)
@@ -99,7 +108,8 @@ class BusinessObject(object):
     def tofile(self, file):
         self.properties['id'] = self.id
         self.properties['payload_size'] = self.payload_size
-        self.properties['type'] = str(self.content_type)
+        if self.content_type is not None:
+            self.properties['type'] = str(self.content_type)
 
         with io.FileIO(file.fileno(), 'w', closefd=False) as f:
             metadata = json.dumps(self.properties).encode('utf-8')
@@ -116,7 +126,8 @@ class BusinessObject(object):
 
         self.properties['id'] = self.id
         self.properties['payload_size'] = self.payload_size
-        self.properties['type'] = str(self.content_type)
+        if self.content_type is not None:
+            self.properties['type'] = str(self.content_type)
         ret = bytearray(json.dumps(self.properties).encode('utf-8'), encoding='utf-8')
         ret += '\x00'
         if self.payload_size > 0:
