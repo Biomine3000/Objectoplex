@@ -81,9 +81,9 @@ class BusinessObject(object):
                 charset = 'UTF-8'
             out_payload = self.payload.decode(charset).encode('ASCII', 'backslashreplace')
             if len(out_payload) > 80:
-                out_payload = out_payload[:77].replace('\n', '\\n') + '...'
+                out_payload = out_payload[:77] + '...'
             return u'<{0} {1} "{2}">'.format(self.__class__.__name__, self.content_type,
-                                             out_payload)
+                                             out_payload.replace('\n', ' '))
         else:
             return u'<{0} {1}>'.format(self.__class__.__name__, self.content_type)
 
@@ -101,11 +101,14 @@ class BusinessObject(object):
         self.properties['payload_size'] = self.payload_size
         self.properties['type'] = str(self.content_type)
 
-        with io.FileIO(file.fileno(), 'w') as f:
-            f.write(json.dumps(self.properties).encode('utf-8'))
-            f.write('\x00')
+        with io.FileIO(file.fileno(), 'w', closefd=False) as f:
+            metadata = json.dumps(self.properties).encode('utf-8')
+            writer = io.BufferedWriter(f, buffer_size=len(metadata) + self.payload_size + 1)
+            writer.write(metadata)
+            writer.write('\x00')
             if self.payload_size > 0:
-                f.write(self.payload)
+                writer.write(self.payload)
+            writer.flush()
 
     def serialize(self, file=None):
         if file is not None:
