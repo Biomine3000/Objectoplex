@@ -5,7 +5,10 @@ from __future__ import print_function
 import logging
 import json
 import re
+import io
 
+from os.path import getsize
+from mimetypes import guess_type
 from email.utils import make_msgid
 
 logger = logging.getLogger("system")
@@ -29,7 +32,6 @@ def read_until_nul(socket):
     s = ''.join(ret)
     s = s.decode('utf-8')
     return s
-
 
 class ObjectType(object):
     def __init__(self, content_type, subtype, charset):
@@ -72,14 +74,16 @@ class BusinessObject(object):
 
         self.content_type = ObjectType.from_string(metadata_dict['type'])
 
-    def __unicode__(self, ):
+    def __unicode__(self):
         if self.content_type.content_type == 'text':
             charset = self.content_type.charset
             if not charset:
                 charset = 'UTF-8'
+            out_payload = self.payload.decode(charset).encode('ASCII', 'backslashreplace')
+            if len(out_payload) > 80:
+                out_payload = out_payload[:77].replace('\n', '\\n') + '...'
             return u'<{0} {1} "{2}">'.format(self.__class__.__name__, self.content_type,
-                                             self.payload.decode(charset).encode('ASCII',
-                                                                                 'backslashreplace'))
+                                             out_payload)
         else:
             return u'<{0} {1}>'.format(self.__class__.__name__, self.content_type)
 
@@ -92,15 +96,53 @@ class BusinessObject(object):
     def __eq__(self, other):
         return self.__hash__() == other.__hash__()
 
-    def serialize(self):
+    def tofile(self, file):
         self.properties['id'] = self.id
         self.properties['payload_size'] = self.payload_size
         self.properties['type'] = str(self.content_type)
-        s = json.dumps(self.properties).encode('utf-8')
-        s += '\x00'
+
+        with io.FileIO(file.fileno(), 'w') as f:
+            f.write(json.dumps(self.properties).encode('utf-8'))
+            f.write('\x00')
+            if self.payload_size > 0:
+                f.write(self.payload)
+
+    def serialize(self, file=None):
+        if file is not None:
+            return self.tofile(file)
+
+        self.properties['id'] = self.id
+        self.properties['payload_size'] = self.payload_size
+        self.properties['type'] = str(self.content_type)
+        ret = bytearray(json.dumps(self.properties).encode('utf-8'), encoding='utf-8')
+        ret += '\x00'
         if self.payload_size > 0:
-            s += self.payload
-        return s
+            ret.extend(self.payload)
+        return ret
+
+    @classmethod
+    def from_string(self, string):
+        metadata_dict = {
+            'size': len(string),
+            'type': "text/plain; charset=UTF-8"
+            }
+        return BusinessObject(metadata_dict, bytearray(string, encoding='utf-8'))
+
+    @classmethod
+    def from_file(self, path):
+        type, encoding = guess_type(path)
+
+        if type is None:
+            raise UnknownFileTypeError("Don't know the content type of %s" % path)
+
+        metadata_dict = {
+            'size': getsize(path),
+            'type': type
+            }
+
+        with io.FileIO(path, 'r') as f:
+            contents = bytearray(f.read())
+        return BusinessObject(metadata_dict, contents)
 
     @classmethod
     def read_from_socket(cls, socket):
