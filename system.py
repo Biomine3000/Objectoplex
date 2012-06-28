@@ -10,6 +10,14 @@ from email.utils import make_msgid
 
 logger = logging.getLogger("system")
 
+def p8(*args, **kwargs):
+    from sys import stdout
+    from codecs import getwriter
+    u8 = getwriter('utf-8')(stdout)
+    if 'file' not in kwargs:
+        kwargs['file'] = u8
+    return print(*args, **kwargs)
+
 def read_until_nul(socket):
     ret = []
     while True:
@@ -31,7 +39,7 @@ class ObjectType(object):
 
     @classmethod
     def from_string(cls, s):
-        m = re.match(ur"(?P<type>\w+)/(?P<subtype>\w+)(;\s+charset=)?(?P<charset>[-\w\d]+)", s)
+        m = re.match(ur"(?P<type>\w+)/(?P<subtype>\w+)(;\s+charset=)?(?P<charset>[-\w\d]+)?", s)
         content_type = m.group('type')
         subtype = m.group('subtype')
         charset = m.group('charset')
