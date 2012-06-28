@@ -1,0 +1,70 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+A tool to create Business Objects on the command line.
+
+# Pipe functionality as described below doesn't yet
+# work :(
+
+# This is meant to be used in a pipe.  To send objects,
+# specified by parameters and also as one part of a pipe.
+
+# make_object first writes everything from stdin to stdout
+# and then writes the created object there.
+"""
+from __future__ import print_function
+
+import sys
+import logging
+import codecs
+import signal
+import select
+import io
+
+from optparse import OptionParser
+
+from system import BusinessObject
+
+u8 = codecs.getwriter('utf-8')(sys.stdout)
+
+logger = logging.getLogger('make_object')
+logger.addHandler(logging.StreamHandler(stream=codecs.getwriter('utf-8')(sys.stderr)))
+
+def p8(*args, **kwargs):
+    if 'file' not in kwargs:
+        kwargs['file'] = u8
+    return print(*args, **kwargs)
+
+def main():
+    parser = OptionParser(usage=__doc__)
+    parser.add_option("-d", "--debug", action="store_true", dest="debug", default=False,
+                      help="write out some more debug information")
+    parser.add_option("-f", "--file", dest="file",
+                      help="make a Business Object out of a file")
+    opts, args = parser.parse_args()
+
+    if opts.debug:
+        logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
+
+    if opts.file:
+        obj = BusinessObject.from_file(opts.file)
+    else:
+        obj = BusinessObject.from_string(args[0])
+
+    # signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+    # rlist, wlist, xlist = select.select([sys.stdin], [], [], 0.5)
+    # if len(rlist) > 0:
+    #     with io.FileIO(sys.stdin.fileno(), 'r') as si:
+    #         with io.FileIO(sys.stdout.fileno(), 'w', closefd=False) as so:
+    #             read = si.read(1)
+    #             while read != "":
+    #                 so.write(read)
+    #                 read = si.read(1)
+
+    obj.tofile(file=sys.stdout)
+    logger.debug("Wrote %s" % obj)
+
+
+if __name__ == '__main__':
+   main()
