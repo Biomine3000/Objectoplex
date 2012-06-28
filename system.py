@@ -39,7 +39,7 @@ class ObjectType(object):
 
     @classmethod
     def from_string(cls, s):
-        m = re.match(ur"(?P<type>\w+)/(?P<subtype>\w+)(;\s+charset=)?(?P<charset>[-\w\d]+)?", s)
+        m = re.match(ur"(?P<type>\w+)/(?P<subtype>[\w-]+)(;\s+charset=)?(?P<charset>[-\w\d]+)?", s)
         content_type = m.group('type')
         subtype = m.group('subtype')
         charset = m.group('charset')
