@@ -8,6 +8,7 @@ import socket
 import codecs
 import select
 import io
+import StringIO
 
 from os import environ as env
 from optparse import OptionParser
@@ -20,14 +21,25 @@ logger = logging.getLogger('raw_client')
 
 class InvalidObject(Exception): pass
 
-def read_print_loop(sock):
+def show(obj):
+    global _opened_image
+    print(unicode(obj), file=u8)
+    if obj.content_type.content_type == 'image':
+        try:
+            import Image
+            im = Image.open(StringIO.StringIO(obj.payload))
+        except Exception, e:
+            print("Got %s when trying to open and show image" % str(e))
+            
+
+def read_show_loop(sock):
     while True:
         rlist, wlist, xlist = select.select([sock], [], [], 1)
         if len(rlist) > 0:
             obj = BusinessObject.read_from_socket(sock)
             if obj is None:
                 raise InvalidObject
-            print(unicode(obj), file=u8)
+            show(obj)
 
 def main():
     parser = OptionParser()
@@ -45,12 +57,13 @@ def main():
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect((opts.host, opts.port))
 
-    sock.sendall(make_registration_object(sys.argv[0], env['USER']).serialize())
+    sock_file = sock.makefile()
+    make_registration_object(sys.argv[0], env['USER']).tofile(sock_file)
 
     try:
         while True:
             try:
-                read_print_loop(sock)
+                read_show_loop(sock)
             except InvalidObject, ivo:
                 logger.error("Received invalid object!")
                 break

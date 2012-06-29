@@ -117,6 +117,7 @@ class BusinessObject(object):
             if self.payload_size > 0:
                 writer.write(self.payload)
             writer.flush()
+            file.flush()
 
     def serialize(self, file=None):
         if file is not None:
