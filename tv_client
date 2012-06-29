@@ -22,7 +22,6 @@ logger = logging.getLogger('raw_client')
 class InvalidObject(Exception): pass
 
 def show(obj):
-    global _opened_image
     print(unicode(obj), file=u8)
     if obj.content_type.content_type == 'image':
         try:
