@@ -22,16 +22,14 @@ def p8(*args, **kwargs):
     return print(*args, **kwargs)
 
 def read_until_nul(socket):
-    ret = []
+    ret = bytearray()
     while True:
-        c = socket.recv(1)
-        if len(c) == 0 or c == '\x00':
+        char = socket.recv(1)
+        if len(char) == 0 or char == '\x00':
             break
-        ret.append(c)
+        ret.extend(char)
 
-    s = ''.join(ret)
-    s = s.decode('utf-8')
-    return s
+    return ret
 
 class ObjectType(object):
     def __init__(self, content_type, subtype, charset):
@@ -162,14 +160,22 @@ class BusinessObject(object):
     def read_from_socket(cls, socket):
         metadata = read_until_nul(socket)
         try:
+            metadata = metadata.decode('utf-8')
             metadata_dict = json.loads(metadata)
+
+            if 'size' in metadata_dict and metadata_dict['size'] > 0:
+                logger.debug("Reading payload of size %i" % metadata_dict['size'])
+                payload = bytearray()
+                while len(payload) < metadata_dict['size']:
+                    payload.extend(socket.recv(metadata_dict['size'] - len(payload)))
+
+                assert(len(payload) == metadata_dict['size'])
+            else:
+                logger.debug("Not reading payload")
+                payload = None
+
+            return BusinessObject(metadata_dict, payload)
         except ValueError, ve:
             logger.warning("Couldn't load JSON from '%s'" % metadata)
             return None
 
-        if 'size' in metadata_dict and metadata_dict['size'] > 0:
-            payload = socket.recv(metadata_dict['size'])
-        else:
-            payload = None
-
-        return BusinessObject(metadata_dict, payload)
