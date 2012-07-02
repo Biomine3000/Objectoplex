@@ -23,7 +23,7 @@ class InvalidObject(Exception): pass
 
 def show(obj):
     print(unicode(obj), file=u8)
-    if obj.content_type.content_type == 'image':
+    if obj.of_content_type('image'):
         try:
             import Image
             im = Image.open(StringIO.StringIO(obj.payload))

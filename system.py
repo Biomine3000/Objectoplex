@@ -45,7 +45,7 @@ class ObjectType(object):
         charset = m.group('charset')
         return ObjectType(content_type, subtype, charset)
 
-    def __unicode__(self, ):
+    def __unicode__(self):
         ret = u'{0}/{1}'.format(self.content_type, self.subtype)
         if self.charset:
             ret += '; charset=' + self.charset
@@ -77,22 +77,34 @@ class BusinessObject(object):
 
         self.event = metadata_dict.get('event', None)
 
+    def of_content_type(self, content_type):
+        if self.content_type and \
+               self.content_type.content_type == content_type:
+            return True
+        else:
+            return False
+
     def __unicode__(self):
-        if self.content_type.content_type == 'text':
-            type_event_snippet = unicode(self.content_type)
-            if self.event is not None:
-                type_event_snippet += "; %s" % self.event
-            
-            charset = self.content_type.charset
-            if not charset:
-                charset = 'UTF-8'
-            out_payload = self.payload.decode(charset).encode('ASCII', 'backslashreplace')
-            if len(out_payload) > 120:
-                out_payload = out_payload[:117] + '...'
-            return u'<{0} {1} "{2}">'.format(self.__class__.__name__, type_event_snippet,
-                                             out_payload.replace('\n', ' '))
+        if self.of_content_type('text') and not self.event:
+            return u'<{0} {1} "{2}">'.format(self.__class__.__name__, self.content_type,
+                                             self.text_payload_snippet().replace('\n', ' '))
+        elif self.of_content_type('text') and self.event:
+            return u'<{0} {1}; {2} "{3}">'.format(self.__class__.__name__, self.content_type,
+                                                  self.event,
+                                                  self.text_payload_snippet().replace('\n', ' '))
+        elif self.event:
+            return u'<{0} {1}; {2}>'.format(self.__class__.__name__, self.content_type, self.event)
         else:
             return u'<{0} {1}>'.format(self.__class__.__name__, self.content_type)
+
+    def text_payload_snippet(self, max_length=120):
+        charset = self.content_type.charset
+        if not charset:
+            charset = 'utf-8'
+        ret = self.payload.decode(charset).encode('ASCII', 'backslashreplace')
+        if len(ret) > max_length:
+            ret = ret[:max_length - 3] + '...'
+        return ret
 
     def __str__(self):
         return unicode(self).encode('ASCII', 'backslashreplace')
