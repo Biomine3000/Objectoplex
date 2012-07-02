@@ -51,23 +51,20 @@ class SystemClient(Greenlet):
 
         while True:
             if not self.queue.empty():
+                rlist, wlist, xlist = select([self.socket], [self.socket], [], timeout=1)
+            else:
+                rlist, wlist, xlist = select([self.socket], [], [], timeout=1)
+
+            if not self.queue.empty() and len(wlist) == 1:
                 try:
-                    logger.debug(u"Waiting to write to {0}...".format(self.socket))
-                    gevent.socket.wait_write(self.socket.fileno(),
-                                             timeout=5, timeout_exc=WaitWriteTimeout('wait_write'))
                     self.socket.send(self.queue.get().serialize())
-                    last_activity = datetime.now()
-                except WaitWriteTimeout, t:
-                    try:
-                        logger.warning(u"Received {0} from {1}".format(t, self.address))
+                except socket.error, e:
+                    if e[0] == errno.ECONNRESET or e[0] == errno.EPIPE:
+                        logger.warning(u"Received {0} from {1}".format(e, self.address))
                         self.close()
                         return
-                    except Exception, e:
-                        logger.debug(u"Stale pass {0}".format(e))
-
-            try:
-                gevent.socket.wait_read(self.socket.fileno(), timeout=1,
-                                        timeout_exc=WaitReadTimeout('wait_read'))
+                    raise e
+            elif len(rlist) == 1:
                 logger.debug(u"Attempting to read an object from {0}".format(self.socket))
                 try:
                     obj = BusinessObject.read_from_socket(self.socket)
@@ -78,13 +75,11 @@ class SystemClient(Greenlet):
                     logger.debug(u"Successfully read object {0}".format(str(obj)))
                     self.gateway.send(self, obj)
                 except socket.error, e:
-                    if e[0] == errno.ECONNRESET:
+                    if e[0] == errno.ECONNRESET or e[0] == errno.EPIPE:
                         logger.warning(u"Received {0} from {1}".format(e, self.address))
                         self.close()
                         return
                     raise e
-            except WaitReadTimeout, t:
-                pass
 
     def send(self, client, message):
         self.queue.put(message)
@@ -101,13 +96,13 @@ class SystemClient(Greenlet):
 class ObjectoPlex(StreamServer):
     def __init__(self, listener, **kwargs):
         StreamServer.__init__(self, listener, **kwargs)
-        self.clients = []
+        self.clients = set()
 
     def handle(self, source, address):
         client = SystemClient(source, address, self)
         gevent.signal(signal.SIGTERM, client.kill)
         gevent.signal(signal.SIGINT, client.kill)
-        self.clients.append(client)
+        self.clients.add(client)
         client.start()
 
     def send(self, client, message):
@@ -119,8 +114,8 @@ class ObjectoPlex(StreamServer):
             to_client.send(client, message)
 
     def unregister(self, client):
-        # TODO: actually remove from clients; leaks memory right now
-        pass
+        self.clients.remove(client)
+        print(len(self.clients))
 
 
 def main():
