@@ -39,6 +39,7 @@ class MultiplexingMiddleware(Middleware):
 class StatisticsMiddleware(Middleware):
     def __init__(self):
         self.received_objects = 0
+        self.client_count = 0
         self.clients_connected_total = 0
         self.clients_disconnected_total = 0
         self.messages_by_type = defaultdict(int)
@@ -61,6 +62,8 @@ class StatisticsMiddleware(Middleware):
             self.send_statistics(sender, message.id)
             return None
 
+        self.client_count = len(clients)
+
         return message
 
     def register(self, client):
@@ -78,7 +81,8 @@ class StatisticsMiddleware(Middleware):
                 'clients connected total': self.clients_connected_total,
                 'clients disconnected total': self.clients_disconnected_total,
                 'messages by type': self.messages_by_type,
-                'events by type': self.events_by_type
+                'events by type': self.events_by_type,
+                'client count': self.client_count
                 }
             }
         client.send(BusinessObject(metadata, None), None)
