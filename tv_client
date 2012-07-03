@@ -13,13 +13,11 @@ import StringIO
 from os import environ as env
 from optparse import OptionParser
 
-from system import BusinessObject
+from system import BusinessObject, InvalidObject
 from tv import make_registration_object
 
 u8 = codecs.getwriter('utf-8')(sys.stdout)
 logger = logging.getLogger('raw_client')
-
-class InvalidObject(Exception): pass
 
 def show(obj):
     print(unicode(obj), file=u8)

@@ -31,6 +31,10 @@ def read_until_nul(socket):
 
     return ret
 
+
+class InvalidObject(Exception): pass
+
+
 class ObjectType(object):
     def __init__(self, content_type, subtype, charset):
         self.content_type = content_type
