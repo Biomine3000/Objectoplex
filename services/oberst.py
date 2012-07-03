@@ -15,7 +15,6 @@ class Oberst(Service):
                                'in-reply-to': obj.id,
                                'size': len(title),
                                'type': 'text/plain; charset=utf-8'},
-                              title)
-
+                              bytearray(title, encoding='utf-8'))
 
 service = Oberst
