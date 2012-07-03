@@ -66,6 +66,10 @@ class Service(object):
                         response = self.handle(obj)
                         if response is not None:
                             response.tofile(self.socket_file)
+                else:
+                    TODO: implement functionality for other than pure stimuli induced behavior
+                    pass
+
             except InvalidObject, ivo:
                 self.socket.close()
                 break
