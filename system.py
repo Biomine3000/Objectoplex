@@ -57,7 +57,7 @@ class ObjectType(object):
 
 class BusinessObject(object):
     def __init__(self, metadata_dict, payload):
-        self.properties = metadata_dict
+        self.metadata = metadata_dict
         if 'id' in metadata_dict:
             self.id = metadata_dict['id']
         else:
@@ -116,13 +116,13 @@ class BusinessObject(object):
         return self.__hash__() == other.__hash__()
 
     def tofile(self, file):
-        self.properties['id'] = self.id
-        self.properties['size'] = self.size
+        self.metadata['id'] = self.id
+        self.metadata['size'] = self.size
         if self.content_type is not None:
-            self.properties['type'] = str(self.content_type)
+            self.metadata['type'] = str(self.content_type)
 
         with io.FileIO(file.fileno(), 'w', closefd=False) as f:
-            metadata = json.dumps(self.properties, ensure_ascii=False)
+            metadata = json.dumps(self.metadata, ensure_ascii=False)
             writer = io.BufferedWriter(f, buffer_size=len(metadata) + self.size + 1)
             writer.write(metadata)
             writer.write('\x00')
@@ -135,11 +135,11 @@ class BusinessObject(object):
         if file is not None:
             return self.tofile(file)
 
-        self.properties['id'] = self.id
-        self.properties['size'] = self.size
+        self.metadata['id'] = self.id
+        self.metadata['size'] = self.size
         if self.content_type is not None:
-            self.properties['type'] = str(self.content_type)
-        ret = bytearray(json.dumps(self.properties, ensure_ascii=False), encoding='utf-8')
+            self.metadata['type'] = str(self.content_type)
+        ret = bytearray(json.dumps(self.metadata, ensure_ascii=False), encoding='utf-8')
         ret += '\x00'
         if self.size > 0:
             ret.extend(self.payload)
