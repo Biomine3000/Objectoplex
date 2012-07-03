@@ -1,0 +1,76 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+import sys
+import socket
+import urllib2
+import select
+import time
+
+from system import BusinessObject
+
+class InvalidObject(Exception): pass
+
+
+def serve_client(obj):
+    if obj.event != 'service/request' or obj.metadata.get('name', None) != 'oberst':
+        return
+
+    title = urllib2.urlopen('http://biomine.cs.helsinki.fi/oberstdorf/?plain=true').read().replace('\n', '')
+
+    return BusinessObject({'event': 'service/reply',
+                           'in-reply-to': obj.id,
+                           'title': title},
+                          None)
+
+def open_connection(host, port):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.connect((host, port))
+
+    sock_file = sock.makefile()
+    BusinessObject({'event': "services/register", 'name': "oberst"}, None).tofile(sock_file)
+    print "Connected to %s:%i" % (host, port)
+
+    try:
+        while True:
+            try:
+                rlist, wlist, xlist = select.select([sock], [], [], 1)
+                if len(rlist) > 0:
+                    obj = BusinessObject.read_from_socket(sock)
+                    if obj is None:
+                        raise InvalidObject
+                    response = serve_client(obj)
+                    if response is not None:
+                        response.tofile(sock_file)
+            except InvalidObject, ivo:
+                sock.close()
+                break
+    except KeyboardInterrupt, kbi:
+        sock.close()
+
+
+def run_service(servers):
+    while True:
+        for host, port in servers:
+            try:
+                open_connection(host, port)
+            except socket.error, e:
+                print "%s:%i" % (host, port), e
+
+            time.sleep(10)
+
+
+def main():
+    if len(sys.argv) < 2 or sys.argv[1] in ['-h', '--help', '-help']:
+        sys.exit("Usage: %s host:port [host:port] [host:port] ...]" %
+                 sys.argv[0])
+
+    servers = [(item.split(':')[0], int(item.split(':')[1]))
+               for item in sys.argv[1:]]
+    run_service(servers)
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except KeyboardInterrupt, ke:
+        sys.exit(ke)
