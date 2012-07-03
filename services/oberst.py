@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
-from time import sleep
+import urllib2
 
+from system import BusinessObject
 from service import Service
+
 
 class Oberst(Service):
     __service__ = 'oberst'
