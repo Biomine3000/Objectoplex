@@ -18,7 +18,7 @@ from gevent import Greenlet
 from gevent.select import select
 
 from system import BusinessObject, ObjectType
-from middleware import MultiplexingMiddleware, ChecksumMiddleware
+from middleware import StatisticsMiddleware, MultiplexingMiddleware, ChecksumMiddleware
 
 logger = logging.getLogger('server')
 
@@ -83,14 +83,17 @@ class SystemClient(Greenlet):
 class ObjectoPlex(StreamServer):
     """
     ObjectoPlex is parameterized by giving a list of middleware classes.  The
-    defaults are ChecksumMiddleware and MultiplexingMiddleware.
+    defaults are StatisticsMiddleware, ChecksumMiddleware and
+    MultiplexingMiddleware.
     """
     def __init__(self, listener, middlewares=[], **kwargs):
         StreamServer.__init__(self, listener, **kwargs)
         self.clients = set()
 
         if len(middlewares) == 0:
-            self.middlewares = [ChecksumMiddleware(), MultiplexingMiddleware()]
+            self.middlewares = [StatisticsMiddleware(),
+                                ChecksumMiddleware(),
+                                MultiplexingMiddleware()]
         else:
             self.middlewares = middlewares
 
