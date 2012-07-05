@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+from __future__ import print_function
+
 import hashlib
 import logging
 
@@ -86,3 +88,15 @@ class StatisticsMiddleware(Middleware):
                 }
             }
         client.send(BusinessObject(metadata, None), None)
+
+class StdErrMiddleware(Middleware):
+    def __init__(self):
+        from sys import stderr
+        from codecs import getwriter
+        self.out = getwriter('utf-8')(stderr)
+
+    def handle(self, message, sender, clients):
+        print(u'## From: {0}'.format(sender), file=self.out)
+        print(u'  ', end='', file=self.out)
+        message.tofile(self.out)
+        print('\n##', file=self.out)
