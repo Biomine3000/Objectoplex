@@ -18,7 +18,6 @@ from gevent import Greenlet
 from gevent.select import select
 
 from system import BusinessObject, ObjectType
-from middleware import StatisticsMiddleware, MultiplexingMiddleware, ChecksumMiddleware
 
 logger = logging.getLogger('server')
 
@@ -92,6 +91,7 @@ class ObjectoPlex(StreamServer):
         StreamServer.__init__(self, listener, **kwargs)
         self.clients = set()
 
+        from middleware import StatisticsMiddleware, MultiplexingMiddleware, ChecksumMiddleware
         if len(middlewares) == 0:
             self.middlewares = [StatisticsMiddleware(),
                                 ChecksumMiddleware(),
@@ -103,10 +103,11 @@ class ObjectoPlex(StreamServer):
         client = SystemClient(source, address, self)
         gevent.signal(signal.SIGTERM, client.kill)
         gevent.signal(signal.SIGINT, client.kill)
-        self.clients.add(client)
 
         for middleware in self.middlewares:
-            middleware.connect(client)
+            middleware.connect(client, set(self.clients))
+
+        self.clients.add(client)
 
         client.start()
 
@@ -122,4 +123,4 @@ class ObjectoPlex(StreamServer):
         self.clients.remove(client)
 
         for middleware in self.middlewares:
-            middleware.disconnect(client)
+            middleware.disconnect(client, set(self.clients))

@@ -9,6 +9,7 @@ from collections import defaultdict
 from uuid import uuid4
 
 from system import BusinessObject
+from server import SystemClient
 
 logger = logging.getLogger('middleware')
 
@@ -21,10 +22,10 @@ class Middleware(object):
         """
         return message
 
-    def connect(self, client):
+    def connect(self, client, clients):
         pass
 
-    def disconnect(self, client):
+    def disconnect(self, client, clients):
         pass
 
 
@@ -52,6 +53,7 @@ class StatisticsMiddleware(Middleware):
         self.objects_by_type = defaultdict(int)
         self.events_by_type = defaultdict(int)
         self.started = datetime.now()
+        self.average_queue = 0
 
     def handle(self, obj, sender, clients):
         self.received_objects += 1
@@ -72,12 +74,17 @@ class StatisticsMiddleware(Middleware):
         self.client_count = len(clients)
         self.bytes_in += len(obj.serialize())
 
+        queue_length_sum = 0
+        for client in clients:
+            queue_length_sum += client.queue.qsize()
+        self.average_send_queue_length = float(queue_length_sum) / float(len(clients))
+
         return obj
 
-    def connect(self, client):
+    def connect(self, client, clients):
         self.clients_connected_total += 1
 
-    def disconnect(self, client):
+    def disconnect(self, client, clients):
         self.clients_disconnected_total += 1
 
     def send_statistics(self, client, original_id):
@@ -91,7 +98,8 @@ class StatisticsMiddleware(Middleware):
                 'objects by type': self.objects_by_type,
                 'events by type': self.events_by_type,
                 'client count': self.client_count,
-                'bytes in': self.bytes_in
+                'bytes in': self.bytes_in,
+                'average send queue length': self.average_send_queue_length,
                 }
             }
         client.send(BusinessObject(metadata, None), None)
@@ -111,33 +119,114 @@ class StdErrMiddleware(Middleware):
         return obj
 
 
+class RoutedSystemClient(SystemClient):
+    # {"name": "BiomineTV", "subscriptions": "all", "receive": "no_echo",
+    #  "event": "clients/register", "user": "gua",
+    #  "id": "<20120705155613.14376.94125@localhost>", "size": 0}
+    def has_routing_id(self, routing_id):
+        if self.routing_id == routing_id:
+            return True
+        elif routing_id in self.extra_routing_ids:
+            return True
+        return False
+
+    def send(self, message, sender):
+        if self.queue.qsize() > 100:
+            self.queue.get()
+            logger.warning(u"{0} send queue size is 100!".format(self))
+
+        super(RoutedSystemClient, self).send(message, sender)
+
+
+def make_registration_reply(client, obj, routing_id):
+    payload = None
+    metadata = {
+        'event': 'clients/register/reply',
+        'routing-id': routing_id
+        }
+
+    if 'name' in obj.metadata and 'user' in obj.metadata:
+        payload = bytearray(u'Welcome, {0}-{1}'.format(obj.metadata['name'],
+                                                       obj.metadata['user']), encoding='utf-8')
+        metadata['size'] = len(payload)
+        metadata['type'] = 'text/plain; charset=UTF-8'
+        
+    return BusinessObject(metadata, payload)
+
+def promote_to_routed_system_client(client, obj):
+    client.__class__ = RoutedSystemClient
+
+    client.routing_id = make_routing_id(registration_object=obj)
+    client.extra_routing_ids = []
+    client.receive = "routed"
+    client.subscriptions = "all"
+
+    if obj is None:
+        logger.info(u"Client {0} registered".format(client))
+        return
+
+    client.receive = obj.metadata.get('receive', 'routed')
+    client.subscriptions = obj.metadata.get('subscriptions', 'all')
+
+    if 'routing-ids' in obj.metadata:
+        routing_ids = obj.metadata['routing-ids']
+        if isinstance(routing_ids, basestring):
+            logger.error(u"Got {0} as routing-ids from {1}".format(routing_ids, client))
+        else:
+            for routing_id in routing_ids:
+                client.extra_routing_ids.append(routing_id)
+
+    # Send a registration reply
+    client.send(make_registration_reply(client, obj, client.routing_id), None)
+    logger.info(u"Client {0} registered".format(client))
+    return make_registration_notification(client, obj, client.routing_id)
+
+def make_registration_notification(client, obj, routing_id):
+    payload = None
+    metadata = {
+        'event': 'clients/register/notify',
+        'routing-id': routing_id
+        }
+
+    if 'name' in obj.metadata:
+        metadata['name'] = obj.metadata['name']
+    if 'user' in obj.metadata:
+        metadata['user'] = obj.metadata['user']
+
+    if 'name' in obj.metadata and 'user' in obj.metadata:
+        payload = bytearray(u'{0}-{1} joined!'.format(obj.metadata['name'],
+                                                      obj.metadata['user']), encoding='utf-8')
+        metadata['size'] = len(payload)
+        metadata['type'] = 'text/plain; charset=UTF-8'
+
+    return BusinessObject(metadata, payload)
+
+def make_routing_id(registration_object=None):
+    if registration_object:
+        obj = registration_object
+        return obj.metadata.get('routing-id',
+                                obj.metadata.get('unique-routing-id',
+                                                 make_routing_id()))
+
+    return str(uuid4())
+
+
 class RoutingMiddleware(Middleware):
     def __init__(self):
-        self.routing_id = self.make_routing_id() # routing id of the server
-        self.routing_ids = {} # client => routing-id mapping
-        self.clients = {} # routing-id => client mapping
-        self.routing_information = {} # client => routing information dict; subscriptions, receive etc
-        self.extra_routing_ids = {} # client => [extra-routing-id] mapping
+        self.routing_id = make_routing_id() # routing id of the server
 
     def handle(self, obj, sender, clients):
-        # {"name": "BiomineTV", "subscriptions": "all", "receive": "no_echo",
-        #  "event": "clients/register", "user": "gua",
-        #  "id": "<20120705155613.14376.94125@localhost>", "size": 0}
         if obj.event == 'clients/register':
             self.register(obj, sender)
-            return
 
         return self.route(obj, sender, clients)
 
-    def connect(self, client):
+    def connect(self, client, clients):
         self.register(None, client)
 
-    def disconnect(self, client):
-        # TODO: refactor method protocol to allow for object sending here
-        # result = self.make_client_part_notification(client)
-        routing_id = self.routing_ids[client]
-        del self.routing_ids[client]
-        del self.clients[routing_id]
+    def disconnect(self, client, clients):
+        # TODO: notify of disconnect
+        pass
 
     def route(self, obj, sender, clients):
         if 'route' in obj.metadata:
@@ -151,7 +240,7 @@ class RoutingMiddleware(Middleware):
                 logger.info("Dropping object %s; loop!" % obj)
                 return None
         elif len(route) == 0:
-            route.append(self.routing_ids[sender])
+            route.append(sender.routing_id)
 
         route.append(self.routing_id)
 
@@ -160,8 +249,8 @@ class RoutingMiddleware(Middleware):
                 recipient.send(obj, sender)
 
     def should_route_to(self, obj, sender, recipient):
-        receive = self.routing_information[recipient]['receive']
-        subscriptions = self.routing_information[recipient]['subscriptions']
+        receive = recipient.receive
+        subscriptions = recipient.subscriptions
 
         should = None
 
@@ -181,7 +270,7 @@ class RoutingMiddleware(Middleware):
             should = True
         elif receive == "routed":
             if 'to' in obj.metadata:
-                if self.has_routing_id(recipient, to):
+                if recipient.has_routing_id(to):
                     should = True
                 else:
                     should = False
@@ -194,119 +283,19 @@ class RoutingMiddleware(Middleware):
 
         return should
 
-    def has_routing_id(self, client, routing_id):
-        if self.routing_ids[client] == routing_id:
-            return True
-        elif routing_id in self.extra_routing_ids[client]:
-            return True
-        return False
-
     def register(self, obj, client):
         """
         Implements registration of clients' routing options.
         """
-        if obj is not None:
-            routing_id = self.routing_id_from(obj)
-        else:
-            routing_id = self.make_routing_id()
+        promote_to_routed_system_client(client, obj)
 
-        self.routing_ids[client] = routing_id
-        self.clients[routing_id] = client
-
-        self.routing_information[client] = {}
-        self.extra_routing_ids[client] = []
-
-        self.routing_information[client]['receive'] = 'routed'
-        self.routing_information[client]['subscriptions'] = 'all'
-
-        if obj is None:
-            logger.info(u"Client {0} registered".format(client))
-            return
-
-        self.routing_information[client]['receive'] = obj.metadata.get('receive', 'all')
-        self.routing_information[client]['subscriptions'] = obj.metadata.get('subscriptions', 'all')
-
-        if 'routing-ids' in obj.metadata:
-            routing_ids = obj.metadata['routing-ids']
-            if isinstance(routing_ids, basestring):
-                logger.error(u"Got {0} as routing-ids from {1}".format(routing_ids, client))
-            else:
-                for routing_id in routing_ids:
-                    self.extra_routing_ids[client].append(routing_id)
-
-        # Send a registration reply
-        client.send(self.make_registration_reply(client, obj, routing_id), None)
-        logger.info(u"Client {0} registered".format(client))
-        return self.make_registration_notification(client, obj, routing_id)
-
-    def make_registration_reply(self, client, obj, routing_id):
-        payload = None
-        metadata = {
-            'event': 'clients/register/reply',
-            'routing-id': routing_id
-            }
-
-        if 'name' in obj.metadata and 'user' in obj.metadata:
-            payload = bytearray(u'Welcome, {0}-{1}'.format(obj.metadata['name'],
-                                                           obj.metadata['user']), encoding='utf-8')
-            metadata['size'] = len(payload)
-            metadata['type'] = 'text/plain; charset=UTF-8'
-
-        return BusinessObject(metadata, payload)
-
-    def make_registration_notification(self, client, obj, routing_id):
-        payload = None
-        metadata = {
-            'event': 'clients/register/notify',
-            'routing-id': routing_id
-            }
-
-        if 'name' in obj.metadata:
-            metadata['name'] = obj.metadata['name']
-        if 'user' in obj.metadata:
-            metadata['user'] = obj.metadata['user']
-
-        if 'name' in obj.metadata and 'user' in obj.metadata:
-            payload = bytearray(u'{0}-{1} joined!'.format(obj.metadata['name'],
-                                                          obj.metadata['user']), encoding='utf-8')
-            metadata['size'] = len(payload)
-            metadata['type'] = 'text/plain; charset=UTF-8'
-
-        return BusinessObject(metadata, payload)
-
-    def make_client_part_notification(self, client):
-        payload = None
-        metadata = {
-            'event': 'clients/register/notify',
-            'routing-id': routing_id
-            }
-
-        if 'name' in obj.metadata:
-            metadata['name'] = obj.metadata['name']
-        if 'user' in obj.metadata:
-            metadata['user'] = obj.metadata['user']
-
-        if 'name' in obj.metadata and 'user' in obj.metadata:
-            payload = bytearray(u'{0} parted!'.format(client.socket.getpeername()), encoding='utf-8')
-            metadata['size'] = len(payload)
-            metadata['type'] = 'text/plain; charset=UTF-8'
-
-        return BusinessObject(metadata, payload)
-
-    def routing_id_from(self, obj):
-        return obj.metadata.get('routing-id',
-                                    obj.metadata.get('unique-routing-id',
-                                                         self.make_routing_id()))
-
-    def make_routing_id(self):
-        return str(uuid4())
 
 
 class MOTDMiddleware(Middleware):
     def __init__(self, text):
         self.payload = bytearray(text, encoding='utf-8')
 
-    def connect(self, client):
+    def connect(self, client, clients):
         client.send(BusinessObject({'type': 'text/plain; charset=UTF-8',
                                     'size': len(self.payload),
                                     'sender': 'pyabboe'},
