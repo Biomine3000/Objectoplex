@@ -57,6 +57,8 @@ def main():
 
     parser.add_option("--host", dest="host", default="localhost")
     parser.add_option("--port", dest="port", default=7890, type="int")
+    
+    parser.add_option("--delay", dest="delay", default=1.0, type="float")
 
     opts, args = parser.parse_args()
 
@@ -76,7 +78,14 @@ def main():
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect((opts.host, opts.port))
 
-    make_registration_object(sys.argv[0], env['USER']).serialize(socket=sock)
+    metadata = {
+        'event': 'clients/register',
+        'receive': 'none',
+        'subscriptions': 'none',
+        'name': 'image_sender',
+        'user': env['USER']
+        }
+    BusinessObject(metadata, None).serialize(socket=sock)
 
     while True:
         for item in items:
@@ -86,7 +95,7 @@ def main():
                 logger.info(u"Sent {0}".format(item.encode('ascii', 'ignore')))
             except UnicodeDecodeError, e:
                 pass
-            sleep(1)
+            sleep(opts.delay)
 
 
 if __name__ == '__main__':

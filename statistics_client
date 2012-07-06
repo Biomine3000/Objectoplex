@@ -5,6 +5,7 @@ import select
 
 from optparse import OptionParser
 from time import sleep
+from os import environ as env
 
 from system import BusinessObject, InvalidObject
 
@@ -17,6 +18,15 @@ def main():
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect((opts.host, opts.port))
+
+    metadata = {
+        'event': 'clients/register',
+        'receive': 'none',
+        'subscriptions': 'none',
+        'name': 'statistics_client',
+        'user': env['USER']
+        }
+    BusinessObject(metadata, None).serialize(socket=sock)
 
     metadata = {'event': 'services/request',
                 'name': 'statistics'}
