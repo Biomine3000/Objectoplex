@@ -36,29 +36,28 @@ def main():
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect((opts.host, opts.port))
 
-    if not opts.listen:
-        logger.debug("Trying to send a plaintext message...")
-        with io.FileIO(sys.stdin.fileno(), 'r') as si:
+    with io.FileIO(sys.stdin.fileno(), 'r') as si:
+        read = si.read(1)
+        while read != "":
+            sock.sendall(read)
             read = si.read(1)
-            while read != "":
-                sock.sendall(read)
-                read = si.read(1)
-        sock.close()
-        # logger.debug(u"Sent {0}".format(msg))
-        return
 
-    try:
-        while True:
-            rlist, wlist, xlist = select.select([sock], [], [], 1)
-            if len(rlist) > 0:
-                obj = BusinessObject.read_from_socket(sock)
-                if obj is None:
-                    raise InvalidObject
-                print(unicode(obj), file=u8)
-    except KeyboardInterrupt, kbi:
-        sock.close()
-    except InvalidObject, ivo:
-        logger.error("Received invalid object; bailing out!")
+    if opts.listen:
+        try:
+            while True:
+                rlist, wlist, xlist = select.select([sock], [], [], 1)
+                if len(rlist) > 0:
+                    obj = BusinessObject.read_from_socket(sock)
+                    if obj is None:
+                        raise InvalidObject
+                    print(unicode(obj), file=u8)
+                    print(obj.metadata, file=u8)
+        except KeyboardInterrupt, kbi:
+            sock.close()
+        except InvalidObject, ivo:
+            logger.error("Received invalid object; bailing out!")
+            sock.close()
+    else:
         sock.close()
 
 
