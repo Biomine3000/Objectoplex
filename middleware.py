@@ -49,7 +49,7 @@ class StatisticsMiddleware(Middleware):
         self.bytes_in = 0
         self.clients_connected_total = 0
         self.clients_disconnected_total = 0
-        self.objs_by_type = defaultdict(int)
+        self.objects_by_type = defaultdict(int)
         self.events_by_type = defaultdict(int)
         self.started = datetime.now()
 
@@ -57,9 +57,9 @@ class StatisticsMiddleware(Middleware):
         self.received_objects += 1
 
         if obj.content_type is not None:
-            self.objs_by_type[str(obj.content_type)] += 1
+            self.objects_by_type[str(obj.content_type)] += 1
         else:
-            self.objs_by_type[""] += 1
+            self.objects_by_type[""] += 1
 
         if obj.event is not None:
             self.events_by_type[str(obj.event)] += 1
@@ -88,7 +88,7 @@ class StatisticsMiddleware(Middleware):
                 'received objects': self.received_objects,
                 'clients connected total': self.clients_connected_total,
                 'clients disconnected total': self.clients_disconnected_total,
-                'objs by type': self.objs_by_type,
+                'objects by type': self.objects_by_type,
                 'events by type': self.events_by_type,
                 'client count': self.client_count,
                 'bytes in': self.bytes_in
