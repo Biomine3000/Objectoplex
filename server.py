@@ -80,6 +80,13 @@ class SystemClient(Greenlet):
         except:
             pass
 
+    def __unicode__(self):
+        return u'<{0} {1}>'.format(self.__class__.__name__, self.address)
+
+    def __str__(self):
+        return unicode(self).encode('ASCII', 'backslashreplace')
+
+
 
 class ObjectoPlex(StreamServer):
     """
