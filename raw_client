@@ -11,12 +11,10 @@ import io
 
 from optparse import OptionParser
 
-from system import BusinessObject
+from system import BusinessObject, InvalidObject
 
 u8 = codecs.getwriter('utf-8')(sys.stdout)
 logger = logging.getLogger('raw_client')
-
-class InvalidObject(Exception): pass
 
 def main():
     parser = OptionParser()

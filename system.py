@@ -119,35 +119,42 @@ class BusinessObject(object):
     def __eq__(self, other):
         return self.__hash__() == other.__hash__()
 
-    def tofile(self, file):
-        self.metadata['id'] = self.id
-        self.metadata['size'] = self.size
-        if self.content_type is not None:
-            self.metadata['type'] = str(self.content_type)
-
+    def _to_file(self, serialized, file):
         with io.FileIO(file.fileno(), 'w', closefd=False) as f:
-            metadata = json.dumps(self.metadata, ensure_ascii=False)
-            writer = io.BufferedWriter(f, buffer_size=len(metadata) + self.size + 1)
-            writer.write(metadata)
-            writer.write('\x00')
-            if self.size > 0:
-                writer.write(self.payload)
+            writer = io.BufferedWriter(f, buffer_size=len(serialized))
+            writer.write(serialized)
             writer.flush()
             file.flush()
 
-    def serialize(self, file=None):
-        if file is not None:
-            return self.tofile(file)
+    def _to_socket(self, serialized, socket):
+        sent_total = 0
+        while sent_total < len(serialized):
+            sent = socket.send(serialized[sent_total:])
+            if sent == 0:
+                raise RuntimeError("socket connection broken")
+            sent_total += sent
+        return len(serialized), sent_total
 
+    def serialize(self, file=None, socket=None):
+        """
+        Serializes the object to bytearray, file or socket.
+        """
         self.metadata['id'] = self.id
         self.metadata['size'] = self.size
         if self.content_type is not None:
             self.metadata['type'] = str(self.content_type)
+
         ret = bytearray(json.dumps(self.metadata, ensure_ascii=False), encoding='utf-8')
         ret += '\x00'
         if self.size > 0:
             ret.extend(self.payload)
-        return ret
+
+        if file is not None:
+            return self._to_file(ret, file)
+        elif socket is not None:
+            return self._to_socket(ret, socket)
+        else:
+            return ret
 
     @classmethod
     def from_string(self, string):

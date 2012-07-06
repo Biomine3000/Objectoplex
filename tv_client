@@ -21,6 +21,7 @@ logger = logging.getLogger('raw_client')
 
 def show(obj):
     print(unicode(obj), file=u8)
+    print(obj.metadata, file=u8)
     if obj.of_content_type('image'):
         try:
             import Image
@@ -54,8 +55,7 @@ def main():
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect((opts.host, opts.port))
 
-    sock_file = sock.makefile()
-    make_registration_object(sys.argv[0], env['USER']).tofile(sock_file)
+    make_registration_object(sys.argv[0], env['USER']).serialize(socket=sock)
 
     try:
         while True:

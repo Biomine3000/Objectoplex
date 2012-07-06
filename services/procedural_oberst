@@ -26,8 +26,7 @@ def open_connection(host, port):
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect((host, port))
 
-    sock_file = sock.makefile()
-    BusinessObject({'event': "services/register", 'name': "oberst"}, None).tofile(sock_file)
+    BusinessObject({'event': "services/register", 'name': "oberst"}, None).serialize(socket=sock)
     print "Connected to %s:%i" % (host, port)
 
     try:
@@ -40,7 +39,7 @@ def open_connection(host, port):
                         raise InvalidObject
                     response = serve_client(obj)
                     if response is not None:
-                        response.tofile(sock_file)
+                        response.serialize(socket=sock)
             except InvalidObject, ivo:
                 sock.close()
                 break

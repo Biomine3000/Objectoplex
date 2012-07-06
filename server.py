@@ -44,7 +44,9 @@ class SystemClient(Greenlet):
 
             if not self.queue.empty() and len(wlist) == 1:
                 try:
-                    self.socket.send(self.queue.get().serialize())
+                    obj = self.queue.get()
+                    size, sent = obj.serialize(socket=self.socket)
+                    logger.debug(u"Sent {0}/{1} of {2}".format(sent, size, obj))
                 except socket.error, e:
                     if e[0] == errno.ECONNRESET or e[0] == errno.EPIPE:
                         logger.warning(u"Received {0} from {1}".format(e, self.address))

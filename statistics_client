@@ -18,13 +18,12 @@ def main():
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect((opts.host, opts.port))
 
-    sock_file = sock.makefile()
     metadata = {'event': 'services/request',
                 'name': 'statistics'}
 
     while True:
         req = BusinessObject(metadata, None)
-        req.tofile(sock_file)
+        req.serialize(socket=sock)
 
         while True:
             rlist, wlist, xlist = select.select([sock], [], [], 1)

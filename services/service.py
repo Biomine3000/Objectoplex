@@ -35,12 +35,11 @@ class Service(object):
     def _open(self):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.connect((self.host, self.port))
-        self.socket_file = self.socket.makefile()
 
     def register(self):
         BusinessObject({'event': "services/register",
                         'name': self.__class__.__service__},
-                       None).tofile(self.socket_file)
+                       None).serialize(socket=self.socket)
         self.logger.info("Registered to server as service %s" %
                          self.__class__.__service__)
 
@@ -65,7 +64,7 @@ class Service(object):
                     if self.should_handle(obj):
                         response = self.handle(obj)
                         if response is not None:
-                            response.tofile(self.socket_file)
+                            response.serialize(socket=self.socket)
                 else:
                     TODO: implement functionality for other than pure stimuli induced behavior
                     pass

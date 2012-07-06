@@ -62,7 +62,7 @@ def main():
     #                 so.write(read)
     #                 read = si.read(1)
 
-    obj.tofile(file=sys.stdout)
+    obj.serialize(file=sys.stdout)
     logger.debug("Wrote %s" % obj)
 
 

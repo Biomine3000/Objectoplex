@@ -29,16 +29,16 @@ class Middleware(object):
 
 
 class ChecksumMiddleware(Middleware):
-    def handle(self, message, *args):
-        if 'sha1' not in message.metadata and message.size > 0:
-            message.metadata['sha1'] = hashlib.sha1(message.payload).hexdigest()
-        return message
+    def handle(self, obj, *args):
+        if 'sha1' not in obj.metadata and obj.size > 0:
+            obj.metadata['sha1'] = hashlib.sha1(obj.payload).hexdigest()
+        return obj
 
 
 class MultiplexingMiddleware(Middleware):
-    def handle(self, message, sender, clients):
+    def handle(self, obj, sender, clients):
         for client in clients:
-            client.send(message, sender)
+            client.send(obj, sender)
         return None
 
 
@@ -48,29 +48,29 @@ class StatisticsMiddleware(Middleware):
         self.client_count = 0
         self.clients_connected_total = 0
         self.clients_disconnected_total = 0
-        self.messages_by_type = defaultdict(int)
+        self.objs_by_type = defaultdict(int)
         self.events_by_type = defaultdict(int)
         self.started = datetime.now()
 
-    def handle(self, message, sender, clients):
+    def handle(self, obj, sender, clients):
         self.received_objects += 1
 
-        if message.content_type is not None:
-            self.messages_by_type[str(message.content_type)] += 1
+        if obj.content_type is not None:
+            self.objs_by_type[str(obj.content_type)] += 1
         else:
-            self.messages_by_type[""] += 1
+            self.objs_by_type[""] += 1
 
-        if message.event is not None:
-            self.events_by_type[str(message.event)] += 1
+        if obj.event is not None:
+            self.events_by_type[str(obj.event)] += 1
 
-        if message.event == 'services/request' and \
-               message.metadata.get('name', None) == 'statistics':
-            self.send_statistics(sender, message.id)
+        if obj.event == 'services/request' and \
+               obj.metadata.get('name', None) == 'statistics':
+            self.send_statistics(sender, obj.id)
             return None
 
         self.client_count = len(clients)
 
-        return message
+        return obj
 
     def connect(self, client):
         self.clients_connected_total += 1
@@ -86,7 +86,7 @@ class StatisticsMiddleware(Middleware):
                 'received objects': self.received_objects,
                 'clients connected total': self.clients_connected_total,
                 'clients disconnected total': self.clients_disconnected_total,
-                'messages by type': self.messages_by_type,
+                'objs by type': self.objs_by_type,
                 'events by type': self.events_by_type,
                 'client count': self.client_count
                 }
@@ -100,12 +100,12 @@ class StdErrMiddleware(Middleware):
         from codecs import getwriter
         self.out = getwriter('utf-8')(stderr)
 
-    def handle(self, message, sender, clients):
+    def handle(self, obj, sender, clients):
         print(u'## From: {0}'.format(sender), file=self.out)
         print(u'  ', end='', file=self.out)
-        message.tofile(self.out)
+        obj.serialize(file=self.out)
         print('\n##', file=self.out)
-        return message
+        return obj
 
 
 class RoutingMiddleware(Middleware):
@@ -116,15 +116,15 @@ class RoutingMiddleware(Middleware):
         self.routing_information = {} # client => routing information dict; subscriptions, receive etc
         self.extra_routing_ids = {} # client => [extra-routing-id] mapping
 
-    def handle(self, message, sender, clients):
+    def handle(self, obj, sender, clients):
         # {"name": "BiomineTV", "subscriptions": "all", "receive": "no_echo",
         #  "event": "clients/register", "user": "gua",
         #  "id": "<20120705155613.14376.94125@localhost>", "size": 0}
-        if message.event == 'clients/register':
-            self.register(message, sender)
+        if obj.event == 'clients/register':
+            self.register(obj, sender)
             return
 
-        return self.route(message, sender, clients)
+        return self.route(obj, sender, clients)
 
     def connect(self, client):
         self.register(None, client)
@@ -136,16 +136,16 @@ class RoutingMiddleware(Middleware):
         del self.routing_ids[client]
         del self.clients[routing_id]
 
-    def route(self, message, sender, clients):
-        if 'route' in message.metadata:
-            route = message.metadata['route']
+    def route(self, obj, sender, clients):
+        if 'route' in obj.metadata:
+            route = obj.metadata['route']
         else:
             route = []
-            message.metadata['route'] = route
+            obj.metadata['route'] = route
 
         if len(route) > 0:
             if self.routing_id in route:
-                logger.info("Dropping object %s; loop!" % message)
+                logger.info("Dropping object %s; loop!" % obj)
                 return None
         elif len(route) == 0:
             route.append(self.routing_ids[sender])
@@ -153,10 +153,10 @@ class RoutingMiddleware(Middleware):
         route.append(self.routing_id)
 
         for recipient in clients:
-            if self.should_route_to(message, sender, recipient):
-                recipient.send(message, sender)
+            if self.should_route_to(obj, sender, recipient):
+                recipient.send(obj, sender)
 
-    def should_route_to(self, message, sender, recipient):
+    def should_route_to(self, obj, sender, recipient):
         receive = self.routing_information[recipient]['receive']
         subscriptions = self.routing_information[recipient]['subscriptions']
 
@@ -170,14 +170,14 @@ class RoutingMiddleware(Middleware):
             else:
                 should = True
         elif receive == "events_only":
-            if message.event is not None:
+            if obj.event is not None:
                 should = True
             else:
                 should = False
         elif receive == "all":
             should = True
         elif receive == "routed":
-            if 'to' in message.metadata:
+            if 'to' in obj.metadata:
                 if self.has_routing_id(recipient, to):
                     should = True
                 else:
@@ -198,9 +198,12 @@ class RoutingMiddleware(Middleware):
             return True
         return False
 
-    def register(self, message, client):
-        if message is not None:
-            routing_id = self.routing_id_from(message)
+    def register(self, obj, client):
+        """
+        Implements registration of clients' routing options.
+        """
+        if obj is not None:
+            routing_id = self.routing_id_from(obj)
         else:
             routing_id = self.make_routing_id()
 
@@ -213,15 +216,15 @@ class RoutingMiddleware(Middleware):
         self.routing_information[client]['receive'] = 'routed'
         self.routing_information[client]['subscriptions'] = 'all'
 
-        if message is None:
+        if obj is None:
             logger.info(u"Client {0} registered".format(client))
             return
 
-        self.routing_information[client]['receive'] = message.metadata.get('receive', 'all')
-        self.routing_information[client]['subscriptions'] = message.metadata.get('subscriptions', 'all')
+        self.routing_information[client]['receive'] = obj.metadata.get('receive', 'all')
+        self.routing_information[client]['subscriptions'] = obj.metadata.get('subscriptions', 'all')
 
-        if 'routing-ids' in message.metadata:
-            routing_ids = message.metadata['routing-ids']
+        if 'routing-ids' in obj.metadata:
+            routing_ids = obj.metadata['routing-ids']
             if isinstance(routing_ids, basestring):
                 logger.error(u"Got {0} as routing-ids from {1}".format(routing_ids, client))
             else:
@@ -229,40 +232,40 @@ class RoutingMiddleware(Middleware):
                     self.extra_routing_ids[client].append(routing_id)
 
         # Send a registration reply
-        client.send(self.make_registration_reply(client, message, routing_id), None)
+        client.send(self.make_registration_reply(client, obj, routing_id), None)
         logger.info(u"Client {0} registered".format(client))
-        return self.make_registration_notification(client, message, routing_id)
+        return self.make_registration_notification(client, obj, routing_id)
 
-    def make_registration_reply(self, client, message, routing_id):
+    def make_registration_reply(self, client, obj, routing_id):
         payload = None
         metadata = {
             'event': 'clients/register/reply',
             'routing-id': routing_id
             }
 
-        if 'name' in message.metadata and 'user' in message.metadata:
-            payload = bytearray(u'Welcome, {0}-{1}'.format(message.metadata['name'],
-                                                           message.metadata['user']), encoding='utf-8')
+        if 'name' in obj.metadata and 'user' in obj.metadata:
+            payload = bytearray(u'Welcome, {0}-{1}'.format(obj.metadata['name'],
+                                                           obj.metadata['user']), encoding='utf-8')
             metadata['size'] = len(payload)
             metadata['type'] = 'text/plain; charset=UTF-8'
 
         return BusinessObject(metadata, payload)
 
-    def make_registration_notification(self, client, message, routing_id):
+    def make_registration_notification(self, client, obj, routing_id):
         payload = None
         metadata = {
             'event': 'clients/register/notify',
             'routing-id': routing_id
             }
 
-        if 'name' in message.metadata:
-            metadata['name'] = message.metadata['name']
-        if 'user' in message.metadata:
-            metadata['user'] = message.metadata['user']
+        if 'name' in obj.metadata:
+            metadata['name'] = obj.metadata['name']
+        if 'user' in obj.metadata:
+            metadata['user'] = obj.metadata['user']
 
-        if 'name' in message.metadata and 'user' in message.metadata:
-            payload = bytearray(u'{0}-{1} joined!'.format(message.metadata['name'],
-                                                          message.metadata['user']), encoding='utf-8')
+        if 'name' in obj.metadata and 'user' in obj.metadata:
+            payload = bytearray(u'{0}-{1} joined!'.format(obj.metadata['name'],
+                                                          obj.metadata['user']), encoding='utf-8')
             metadata['size'] = len(payload)
             metadata['type'] = 'text/plain; charset=UTF-8'
 
@@ -275,21 +278,21 @@ class RoutingMiddleware(Middleware):
             'routing-id': routing_id
             }
 
-        if 'name' in message.metadata:
-            metadata['name'] = message.metadata['name']
-        if 'user' in message.metadata:
-            metadata['user'] = message.metadata['user']
+        if 'name' in obj.metadata:
+            metadata['name'] = obj.metadata['name']
+        if 'user' in obj.metadata:
+            metadata['user'] = obj.metadata['user']
 
-        if 'name' in message.metadata and 'user' in message.metadata:
+        if 'name' in obj.metadata and 'user' in obj.metadata:
             payload = bytearray(u'{0} parted!'.format(client.socket.getpeername()), encoding='utf-8')
             metadata['size'] = len(payload)
             metadata['type'] = 'text/plain; charset=UTF-8'
 
         return BusinessObject(metadata, payload)
 
-    def routing_id_from(self, message):
-        return message.metadata.get('routing-id',
-                                    message.metadata.get('unique-routing-id',
+    def routing_id_from(self, obj):
+        return obj.metadata.get('routing-id',
+                                    obj.metadata.get('unique-routing-id',
                                                          self.make_routing_id()))
 
     def make_routing_id(self):
