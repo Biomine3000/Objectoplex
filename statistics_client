@@ -6,7 +6,7 @@ import select
 from optparse import OptionParser
 from time import sleep
 
-from system import BusinessObject
+from system import BusinessObject, InvalidObject
 
 def main():
     parser = OptionParser()

@@ -46,6 +46,7 @@ class StatisticsMiddleware(Middleware):
     def __init__(self):
         self.received_objects = 0
         self.client_count = 0
+        self.bytes_in = 0
         self.clients_connected_total = 0
         self.clients_disconnected_total = 0
         self.objs_by_type = defaultdict(int)
@@ -69,6 +70,7 @@ class StatisticsMiddleware(Middleware):
             return None
 
         self.client_count = len(clients)
+        self.bytes_in += len(obj.serialize())
 
         return obj
 
@@ -88,7 +90,8 @@ class StatisticsMiddleware(Middleware):
                 'clients disconnected total': self.clients_disconnected_total,
                 'objs by type': self.objs_by_type,
                 'events by type': self.events_by_type,
-                'client count': self.client_count
+                'client count': self.client_count,
+                'bytes in': self.bytes_in
                 }
             }
         client.send(BusinessObject(metadata, None), None)
