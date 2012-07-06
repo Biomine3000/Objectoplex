@@ -255,7 +255,7 @@ class RoutingMiddleware(Middleware):
         should = None
 
         if receive == "none":
-            should = True
+            should = False
         elif receive == "no_echo":
             if sender is recipient:
                 should = False
@@ -276,10 +276,11 @@ class RoutingMiddleware(Middleware):
                     should = False
             should = True
 
-        if 'subscriptions' == "none":
-            should = False
-        elif 'subscriptions' == "all":
-            should = True
+        if receive:
+            if 'subscriptions' == "none":
+                should = False
+            elif 'subscriptions' == "all":
+                should = True
 
         return should
 
