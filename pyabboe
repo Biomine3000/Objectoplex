@@ -1,0 +1,45 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+from __future__ import print_function
+
+import logging
+import signal
+
+from optparse import OptionParser
+
+import gevent
+
+from server import ObjectoPlex
+from middleware import *
+
+logger = logging.getLogger("pyabboe")
+
+def main():
+    parser = OptionParser()
+    parser.add_option("-d", "--debug", action="store_true", dest="debug", default=False,
+                      help="logging level DEBUG")
+    opts, args = parser.parse_args()
+
+    if opts.debug:
+        logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
+
+    server = ObjectoPlex(("0.0.0.0", 7890),
+                         middlewares=[
+                             MOTDMiddleware(u"Welcome to pyabboe!"),
+                             # StdErrMiddleware(),
+                             StatisticsMiddleware(),
+                             ChecksumMiddleware(),
+                             RoutingMiddleware(),
+                             ])
+    logger.info('Starting server at %s:%s', *(server.address[:2]))
+    gevent.signal(signal.SIGTERM, server.stop)
+    gevent.signal(signal.SIGINT, server.stop)
+    server.serve_forever()
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except KeyError, ke:
+        logger.info("Exiting.")
