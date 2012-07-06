@@ -104,7 +104,7 @@ class ObjectoPlex(StreamServer):
         self.clients.add(client)
 
         for middleware in self.middlewares:
-            middleware.register(client)
+            middleware.connect(client)
 
         client.start()
 
@@ -120,4 +120,4 @@ class ObjectoPlex(StreamServer):
         self.clients.remove(client)
 
         for middleware in self.middlewares:
-            middleware.unregister(client)
+            middleware.disconnect(client)
