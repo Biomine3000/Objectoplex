@@ -14,14 +14,6 @@ from socket import socket as actual_socket
 
 logger = logging.getLogger("system")
 
-def p8(*args, **kwargs):
-    from sys import stdout
-    from codecs import getwriter
-    u8 = getwriter('utf-8')(stdout)
-    if 'file' not in kwargs:
-        kwargs['file'] = u8
-    return print(*args, **kwargs)
-
 def read_until_nul(socket):
     ret = bytearray()
     while True:
