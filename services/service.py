@@ -77,7 +77,7 @@ class Service(object):
                 raise kbi
 
     def should_handle(self, obj):
-        if obj.event != 'service/request' or \
+        if obj.event != 'services/request' or \
                obj.metadata.get('name', None) != self.__class__.__service__:
             return False
         return True
