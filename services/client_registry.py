@@ -74,6 +74,21 @@ class ClientRegistry(Service):
             return self.handle_list(obj)
         elif event == 'list':
             return self.handle_list(obj)
+        elif event == 'part/notify':
+            if 'routing-id' not in obj.metadata:
+                self.logger.warning(u"Received clients/part/notify with no routing-id: {0}".format(obj.metadata))
+                return
+
+            removable = None
+            for client in self.clients:
+                if client.routing_id == obj.metadata['routing-id']:
+                    removable = client
+
+            if removable is not None:
+                self.clients.remove(removable)
+
+            self.logger.info(u"{0} removed from registry!".format(removable))
+            return self.handle_list(obj)
 
 service = ClientRegistry
 

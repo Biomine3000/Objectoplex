@@ -145,12 +145,13 @@ def make_registration_reply(client, obj, routing_id):
         'routing-id': routing_id
         }
 
-    if 'name' in obj.metadata and 'user' in obj.metadata:
-        payload = bytearray(u'Welcome, {0}-{1}'.format(obj.metadata['name'],
-                                                       obj.metadata['user']), encoding='utf-8')
-        metadata['size'] = len(payload)
-        metadata['type'] = 'text/plain; charset=UTF-8'
-        
+    if obj is not None:
+        if 'name' in obj.metadata and 'user' in obj.metadata:
+            payload = bytearray(u'Welcome, {0}-{1}'.format(obj.metadata['name'],
+                                                           obj.metadata['user']), encoding='utf-8')
+            metadata['size'] = len(payload)
+            metadata['type'] = 'text/plain; charset=UTF-8'
+
     return BusinessObject(metadata, payload)
 
 def promote_to_routed_system_client(client, obj):
@@ -163,7 +164,7 @@ def promote_to_routed_system_client(client, obj):
 
     if obj is None:
         logger.info(u"Client {0} registered".format(client))
-        return
+        return make_registration_reply(client, None, client.routing_id)
 
     client.receive = obj.metadata.get('receive', 'all')
     client.subscriptions = obj.metadata.get('subscriptions', 'all')
@@ -201,6 +202,10 @@ def make_registration_notification(client, obj, routing_id):
 
     return BusinessObject(metadata, payload)
 
+def make_part_notification(client, routing_id):
+    return BusinessObject({ 'event': 'clients/part/notify',
+                            'routing-id': routing_id }, None)
+
 def make_routing_id(registration_object=None):
     if registration_object:
         obj = registration_object
@@ -217,16 +222,15 @@ class RoutingMiddleware(Middleware):
 
     def handle(self, obj, sender, clients):
         if obj.event == 'clients/register':
-            self.register(obj, sender)
+            self.register(obj, sender, clients)
 
         return self.route(obj, sender, clients)
 
     def connect(self, client, clients):
-        self.register(None, client)
+        self.route(self.register(None, client, None), client, clients)
 
     def disconnect(self, client, clients):
-        # TODO: notify of disconnect
-        pass
+        self.route(make_part_notification(client, client.routing_id), client, clients)
 
     def route(self, obj, sender, clients):
         if 'route' in obj.metadata:
@@ -287,11 +291,11 @@ class RoutingMiddleware(Middleware):
 
         return should
 
-    def register(self, obj, client):
+    def register(self, obj, client, clients):
         """
         Implements registration of clients' routing options.
         """
-        promote_to_routed_system_client(client, obj)
+        return promote_to_routed_system_client(client, obj)
 
 
 
