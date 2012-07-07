@@ -1,4 +1,4 @@
-* Objectoplex, a Python Object System server with Super Alligator Capabilities
+* Objectoplex, a Python Object System distribution with Super Alligator Capabilities
 ** Environment setup
    You need gevent *only* for running the server.  All clients are usable with
    Python 2.6 except for service_client, which requires Python 2.7.
