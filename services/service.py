@@ -49,9 +49,9 @@ class Service(object):
                 self._open()
                 self.register()
                 self.receive()
-                sleep(10)
             except socket.error, e:
-                self.logger.warning(u"{0}:{1}".format(self.host, self.port), e)
+                self.logger.warning(u"{0}:{1}; {2}".format(self.host, self.port, e))
+            sleep(30)
 
     def receive(self):
         while True:
@@ -66,7 +66,7 @@ class Service(object):
                         if response is not None:
                             response.serialize(socket=self.socket)
                 else:
-                    TODO: implement functionality for other than pure stimuli induced behavior
+                    # TODO: implement functionality for other than pure stimuli induced behavior
                     pass
 
             except InvalidObject, ivo:
