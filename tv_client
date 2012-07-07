@@ -14,7 +14,7 @@ from os import environ as env
 from optparse import OptionParser
 
 from system import BusinessObject, InvalidObject
-from tv import make_registration_object
+from tv import registration_object, list_clients_object
 
 u8 = codecs.getwriter('utf-8')(sys.stdout)
 logger = logging.getLogger('raw_client')
@@ -31,13 +31,21 @@ def show(obj):
             
 
 def read_show_loop(sock):
+    iter = 0
     while True:
+        if iter % 60 == 0:
+            rlist, wlist, xlist = select.select([], [sock], [], 1)
+            if len(wlist) > 0:
+                list_clients_object().serialize(sock)
+
         rlist, wlist, xlist = select.select([sock], [], [], 1)
         if len(rlist) > 0:
             obj = BusinessObject.read_from_socket(sock)
             if obj is None:
                 raise InvalidObject
             show(obj)
+
+        iter += 1
 
 def main():
     parser = OptionParser()
@@ -55,8 +63,7 @@ def main():
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect((opts.host, opts.port))
 
-    make_registration_object(sys.argv[0], env['USER']).serialize(socket=sock)
-
+    registration_object(sys.argv[0], env['USER']).serialize(socket=sock)
     try:
         while True:
             try:
