@@ -245,13 +245,17 @@ class RoutingMiddleware(Middleware):
         route.append(self.routing_id)
 
         for recipient in clients:
-            if 'to' in obj.metadata:
-                print(obj.metadata)
-                print(self.should_route_to(obj, sender, recipient), recipient)
+            # if 'to' in obj.metadata:
+            #     print(obj.metadata)
+            #     print(self.should_route_to(obj, sender, recipient), recipient)
             if self.should_route_to(obj, sender, recipient):
                 recipient.send(obj, sender)
 
     def should_route_to(self, obj, sender, recipient):
+        if 'to' in obj.metadata:
+            if not recipient.has_routing_id(obj.metadata['to']):
+                return False
+        
         receive = recipient.receive
         subscriptions = recipient.subscriptions
 
@@ -265,25 +269,14 @@ class RoutingMiddleware(Middleware):
                 should = False
             else:
                 should = True
-                if 'to' in obj.metadata and \
-                       not recipient.has_routing_id(obj.metadata['to']):
-                    should = False
 
         elif receive == "events_only":
             if obj.event is not None:
                 should = True
-                if 'to' in obj.metadata and \
-                       not recipient.has_routing_id(obj.metadata['to']):
-                        should = False
             else:
                 should = False
 
         elif receive == "all":
-            if 'to' in obj.metadata:
-                if recipient.has_routing_id(obj.metadata['to']):
-                    should = True
-                else:
-                    should = False
             should = True
 
         if should:
