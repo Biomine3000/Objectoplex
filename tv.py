@@ -8,13 +8,20 @@ from system import *
 
 logger = logging.getLogger("tv")
 
-def make_registration_object(client_name, user_name):
+def registration_object(client_name, user_name):
     metadata = {
         'event': 'clients/register',
         'receive': 'all',
         'subscriptions': 'all',
         'name': client_name,
         'user': user_name
+        }
+    return BusinessObject(metadata, None)
+
+def list_clients_object():
+    metadata = {
+        'event': 'clients/list',
+        'avoid': 'hasselhoffian-recursion'
         }
     return BusinessObject(metadata, None)
 
