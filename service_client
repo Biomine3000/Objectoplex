@@ -1,0 +1,96 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+from __future__ import with_statement
+
+import socket
+import select
+import io
+import logging
+import json
+
+from argparse import ArgumentParser
+from time import sleep
+from os import environ as env
+from sys import stdout, stderr
+from codecs import getwriter
+from system import BusinessObject, InvalidObject
+
+logger = logging.getLogger('service_client')
+u8 = getwriter('utf-8')(stdout)
+e8 = getwriter('utf-8')(stderr)
+
+def raw_print(writable, file=stdout):
+    if writable is None:
+        return
+    with io.FileIO(file.fileno(), 'w', closefd=False) as f:
+        writer = io.BufferedWriter(f, buffer_size=len(writable))
+        writer.write(writable)
+        writer.flush()
+        file.flush()
+
+def main():
+    parser = ArgumentParser(description='Make object system service calls')
+    parser.add_argument('call', metavar='CALL', nargs=1,
+                        help='Service to call')
+
+    parser.add_argument("--host", dest="host", default="localhost")
+    parser.add_argument("--port", dest="port", default=7890, type=int)
+    parser.add_argument("-d", "--debug", action="store_true", dest="debug", default=False,
+                        help="logging level DEBUG")
+    parser.add_argument("-m", "--metadata-only", action="store_true", dest="metadata_only",
+                        default=False, help="only print out metadata")
+    parser.add_argument("-p", "--payload-only", action="store_true", dest="payload_only",
+                        default=False, help="only print out the payload")
+    opts = parser.parse_args()
+
+    if opts.debug:
+        logging.basicConfig(level=logging.DEBUG)
+        logger.debug("Debug logging turned on!")
+    logging.basicConfig(level=logging.INFO)
+
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.connect((opts.host, opts.port))
+
+    metadata = {
+        'event': 'clients/register',
+        'receive': 'all',
+        'subscriptions': 'all',
+        'name': 'service_client',
+        'user': env['USER']
+        }
+    reg = BusinessObject(metadata, None)
+    reg.serialize(socket=sock)
+    logger.debug("Sent registration object: {0}".format(reg.metadata))
+
+    req = BusinessObject({'event': 'services/request', 'name': opts.call[0]},
+                         None)
+    req.serialize(sock)
+
+    logger.debug(u"Sent service call: {0}".format(req.metadata))
+
+    while True:
+        rlist, wlist, xlist = select.select([sock], [], [], 1)
+        if len(rlist) > 0:
+            resp = BusinessObject.read_from_socket(sock)
+            if resp is None:
+                raise InvalidObject
+            elif resp.event == 'services/reply' and \
+                   resp.metadata.get('in-reply-to') == req.id:
+                if opts.payload_only:
+                    raw_print(resp.payload)
+                elif opts.metadata_only:
+                    raw_print(bytearray(json.dumps(resp.metadata,
+                                                   ensure_ascii=False),
+                                        encoding='utf-8'))
+                else:
+                    resp.serialize(u8)
+                break
+
+    sock.close()
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except KeyboardInterrupt, ke:
+        print "Exiting."
