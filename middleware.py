@@ -158,14 +158,14 @@ def promote_to_routed_system_client(client, obj):
 
     client.routing_id = make_routing_id(registration_object=obj)
     client.extra_routing_ids = []
-    client.receive = "routed"
+    client.receive = "all"
     client.subscriptions = "all"
 
     if obj is None:
         logger.info(u"Client {0} registered".format(client))
         return
 
-    client.receive = obj.metadata.get('receive', 'routed')
+    client.receive = obj.metadata.get('receive', 'all')
     client.subscriptions = obj.metadata.get('subscriptions', 'all')
 
     if 'routing-ids' in obj.metadata:
@@ -245,6 +245,9 @@ class RoutingMiddleware(Middleware):
         route.append(self.routing_id)
 
         for recipient in clients:
+            if 'to' in obj.metadata:
+                print(obj.metadata)
+                print(self.should_route_to(obj, sender, recipient), recipient)
             if self.should_route_to(obj, sender, recipient):
                 recipient.send(obj, sender)
 
@@ -256,27 +259,34 @@ class RoutingMiddleware(Middleware):
 
         if receive == "none":
             should = False
+
         elif receive == "no_echo":
             if sender is recipient:
                 should = False
             else:
                 should = True
+                if 'to' in obj.metadata and \
+                       not recipient.has_routing_id(obj.metadata['to']):
+                    should = False
+
         elif receive == "events_only":
             if obj.event is not None:
                 should = True
+                if 'to' in obj.metadata and \
+                       not recipient.has_routing_id(obj.metadata['to']):
+                        should = False
             else:
                 should = False
+
         elif receive == "all":
-            should = True
-        elif receive == "routed":
             if 'to' in obj.metadata:
-                if recipient.has_routing_id(to):
+                if recipient.has_routing_id(obj.metadata['to']):
                     should = True
                 else:
                     should = False
             should = True
 
-        if receive:
+        if should:
             if 'subscriptions' == "none":
                 should = False
             elif 'subscriptions' == "all":
