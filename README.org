@@ -1,5 +1,8 @@
 * Objectoplex, a Python Object System server with Super Alligator Capabilities
 ** Environment setup
+   You need gevent *only* for running the server.  All clients are usable with
+   Python 2.6 except for service_client, which requires Python 2.7.
+
    - =virtualenv env=
    - =source env/bin/activate=
    - =pip install -r requirements.txt=
@@ -8,6 +11,16 @@
   =python setup.py install= (you might need to install *cython* to get the
   extension to build).
 ** Usage
-   The server is called =objectoplex= and the client is =text_client=.  Both
-   of them respond to =-h= or =--help= for help.  Customary testing host is
-   *localhost* and port is *7890*.
+   | Command        | Purpose                                                  | Notes |
+   |----------------+----------------------------------------------------------+-------|
+   | pyabboe        | ABBOE functionality providing server capable of routing  |       |
+   | tv_client      | Simple text client that displays text messages on screen |       |
+   | service_client | Handy text client for making service calls               |       |
+   | service        | Service runner helper script                             |       |
+   | image_sender   | Script for sending images, also useful for testing       |       |
+
+   All commands respond to =-h= and =--help= for usage instructions.
+
+   Customary testing host is *localhost* and port is *7890*.  These are the
+   default ones for all the tools provided within the Objectoplex
+   distribution.
