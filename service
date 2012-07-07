@@ -6,6 +6,7 @@ Wrapper command for service modules.
 Usage: ./service --module services/service_module_name_without_dot_py
 """
 
+import sys
 import imp
 import logging
 
@@ -31,6 +32,9 @@ def main():
     logging.basicConfig(level=logging.INFO)
 
     logger = logging.getLogger(opts.module)
+
+    if '/' in opts.module:
+        sys.path.append('/'.join(opts.module.split('/', )[:-1]))
 
     file, pathname, description = imp.find_module(opts.module)
     module = imp.load_module(opts.module, file, pathname, description)
