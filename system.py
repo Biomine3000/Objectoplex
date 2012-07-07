@@ -10,6 +10,7 @@ import io
 from os.path import getsize
 from mimetypes import guess_type
 from email.utils import make_msgid
+from socket import socket as actual_socket
 
 logger = logging.getLogger("system")
 
@@ -148,6 +149,13 @@ class BusinessObject(object):
         ret += '\x00'
         if self.size > 0:
             ret.extend(self.payload)
+
+        # If the caller forgets to use named parameter, the first parameter
+        # gets bound to file and if it's a socket, we can fix the situation
+        # easily here.
+        if isinstance(file, actual_socket):
+            socket = file
+            file = None
 
         if file is not None:
             return self._to_file(ret, file)
