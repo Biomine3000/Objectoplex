@@ -14,6 +14,7 @@ from os import environ as env
 from sys import stdout, stderr
 from codecs import getwriter
 from system import BusinessObject, InvalidObject
+from tv import print_readably
 
 logger = logging.getLogger('service_client')
 u8 = getwriter('utf-8')(stdout)
@@ -41,6 +42,10 @@ def main():
                         default=False, help="only print out metadata")
     parser.add_argument("-p", "--payload-only", action="store_true", dest="payload_only",
                         default=False, help="only print out the payload")
+    parser.add_argument("-r", "--readably", action="store_true", dest="readably",
+                        default=False, help="return pretty-printed, readable output")
+    parser.add_argument("--print-hidden", dest="print_hidden", default=[], type=str, nargs='+',
+                        help="don't hide these keys from pretty-printed output", metavar="KEY")
     opts = parser.parse_args()
 
     if opts.debug:
@@ -79,11 +84,17 @@ def main():
                 if opts.payload_only:
                     raw_print(resp.payload)
                 elif opts.metadata_only:
-                    raw_print(bytearray(json.dumps(resp.metadata,
-                                                   ensure_ascii=False),
-                                        encoding='utf-8'))
+                    if opts.readably:
+                        print_readably(resp, file=u8, no_payload=True, print_hidden_keys=opts.print_hidden)
+                    else:
+                        raw_print(bytearray(json.dumps(resp.metadata,
+                                                       ensure_ascii=False),
+                                            encoding='utf-8'))
                 else:
-                    resp.serialize(u8)
+                    if opts.readably:
+                        print_readably(resp, file=u8, print_hidden_keys=opts.print_hidden)
+                    else:
+                        resp.serialize(u8)
                 break
 
     sock.close()
