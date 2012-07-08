@@ -49,7 +49,7 @@ class ObjectType(object):
 
     def __unicode__(self):
         ret = u'{0}/{1}'.format(self.content_type, self.subtype)
-        if 'charset' in self.metadata:
+        if self.metadata.get('charset', None) is not None:
             ret += '; charset=' + self.metadata['charset']
         return ret
 
