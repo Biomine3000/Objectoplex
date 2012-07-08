@@ -29,23 +29,28 @@ class InvalidObject(Exception): pass
 
 
 class ObjectType(object):
-    def __init__(self, content_type, subtype, charset):
+    def __init__(self, content_type, subtype, metadata=None):
         self.content_type = content_type
         self.subtype = subtype
-        self.charset = charset
+
+        if metadata is None:
+            self.metadata = {}
+        else:
+            self.metadata = metadata
 
     @classmethod
     def from_string(cls, s):
         m = re.match(ur"(?P<type>\w+)/(?P<subtype>[\w-]+)(;\s+charset=)?(?P<charset>[-\w\d]+)?", s)
         content_type = m.group('type')
         subtype = m.group('subtype')
-        charset = m.group('charset')
-        return ObjectType(content_type, subtype, charset)
+        metadata = {'charset': m.group('charset')}
+
+        return ObjectType(content_type, subtype, metadata=metadata)
 
     def __unicode__(self):
         ret = u'{0}/{1}'.format(self.content_type, self.subtype)
-        if self.charset:
-            ret += '; charset=' + self.charset
+        if 'charset' in self.metadata:
+            ret += '; charset=' + self.metadata['charset']
         return ret
 
     def __str__(self):
@@ -95,9 +100,11 @@ class BusinessObject(object):
             return u'<{0} {1}>'.format(self.__class__.__name__, self.content_type)
 
     def text_payload_snippet(self, max_length=120):
-        charset = self.content_type.charset
-        if not charset:
+        if 'charset' in self.content_type.metadata:
+            charset = self.content_type.metadata['charset']
+        else:
             charset = 'utf-8'
+
         ret = self.payload.decode(charset).encode('ASCII', 'backslashreplace')
         if len(ret) > max_length:
             ret = ret[:max_length - 3] + '...'
