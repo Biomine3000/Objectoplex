@@ -44,8 +44,8 @@ def main():
                         default=False, help="only print out the payload")
     parser.add_argument("-r", "--readably", action="store_true", dest="readably",
                         default=False, help="return pretty-printed, readable output")
-    parser.add_argument("--print-hidden", dest="print_hidden", default=[], type=str, nargs='+',
-                        help="don't hide these keys from pretty-printed output", metavar="KEY")
+    parser.add_argument("--include-keys", dest="include_keys", default=[], type=str, nargs='+',
+                        help="show these keys in the pretty-printed output", metavar="KEY")
     opts = parser.parse_args()
 
     if opts.debug:
@@ -85,14 +85,14 @@ def main():
                     raw_print(resp.payload)
                 elif opts.metadata_only:
                     if opts.readably:
-                        print_readably(resp, file=u8, no_payload=True, print_hidden_keys=opts.print_hidden)
+                        print_readably(resp, file=u8, no_payload=True, include=opts.include_keys)
                     else:
                         raw_print(bytearray(json.dumps(resp.metadata,
                                                        ensure_ascii=False),
                                             encoding='utf-8'))
                 else:
                     if opts.readably:
-                        print_readably(resp, file=u8, print_hidden_keys=opts.print_hidden)
+                        print_readably(resp, file=u8, include=opts.include_keys)
                     else:
                         resp.serialize(u8)
                 break

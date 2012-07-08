@@ -30,7 +30,7 @@ def list_clients_object():
         }
     return BusinessObject(metadata, None)
 
-def format_readably(obj, file=None, no_payload=False, print_hidden_keys=[]):
+def format_readably(obj, file=None, no_payload=False, include=set(), exclude=set()):
     global non_readable_keys
     global system_parsed_keys
     snippets = []
@@ -44,13 +44,22 @@ def format_readably(obj, file=None, no_payload=False, print_hidden_keys=[]):
         charset = obj.content_type.metadata.get('charset', 'utf-8')
         text = unicode(obj.payload.decode(charset))
 
-    for key in sorted(obj.metadata.iterkeys()):
-        if key not in non_readable_keys or key in print_hidden_keys:
-            snippet = u"{0}={1}".format(key,
-                                        json.dumps(obj.metadata[key], ensure_ascii=False))
-            snippets.append(snippet)
-        elif key not in system_parsed_keys and key not in print_hidden_keys:
+    print_keys = set()
+
+    for key in obj.metadata.iterkeys():
+        if key in include:
+            print_keys.add(key)
+        elif key in exclude:
             hidden_keys.add(key)
+        elif key not in non_readable_keys:
+            print_keys.add(key)
+        elif key not in system_parsed_keys:
+            hidden_keys.add(key)
+
+    for key in sorted(list(print_keys)):
+        snippet = u"{0}={1}".format(key,
+                                    json.dumps(obj.metadata[key], ensure_ascii=False))
+        snippets.append(snippet)
 
     if obj.content_type is not None:
         snippets.insert(0, u"{0}={1}".format('type',
@@ -75,8 +84,8 @@ def format_readably(obj, file=None, no_payload=False, print_hidden_keys=[]):
         else:
             return '; '.join(snippets)
 
-def print_readably(obj, file=stdout, no_payload=False, print_hidden_keys=[]):
-    format_readably(obj, file=file, no_payload=no_payload, print_hidden_keys=print_hidden_keys)
+def print_readably(obj, file=stdout, no_payload=False, include=set(), exclude=set()):
+    format_readably(obj, file=file, no_payload=no_payload, include=include, exclude=exclude)
 
  # - "clients/register" - register a client to the server. possible services
  #      implemented by the client will be registered separately as "services/register" events.

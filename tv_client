@@ -11,7 +11,7 @@ import io
 import StringIO
 
 from os import environ as env
-from optparse import OptionParser
+from argparse import ArgumentParser
 
 from system import BusinessObject, InvalidObject
 from tv import registration_object, list_clients_object, print_readably
@@ -19,8 +19,8 @@ from tv import registration_object, list_clients_object, print_readably
 u8 = codecs.getwriter('utf-8')(sys.stdout)
 logger = logging.getLogger('raw_client')
 
-def show(obj):
-    print_readably(obj, file=u8)
+def show(obj, include_keys=set()):
+    print_readably(obj, file=u8, include=include_keys)
     if obj.of_content_type('image'):
         try:
             import Image
@@ -29,7 +29,7 @@ def show(obj):
             print("Got %s when trying to open and show image" % str(e))
             
 
-def read_show_loop(sock):
+def read_show_loop(sock, include_keys=set()):
     iter = 0
     while True:
         if iter % 60 == 0:
@@ -42,18 +42,20 @@ def read_show_loop(sock):
             obj = BusinessObject.read_from_socket(sock)
             if obj is None:
                 raise InvalidObject
-            show(obj)
+            show(obj, include_keys=include_keys)
 
         iter += 1
 
 def main():
-    parser = OptionParser()
-    parser.add_option("-d", "--debug", action="store_true", dest="debug", default=False,
-                      help="logging level DEBUG")
-    parser.add_option("--host", dest="host", default="localhost")
-    parser.add_option("--port", dest="port", default=7890, type="int")
-   
-    opts, args = parser.parse_args()
+    parser = ArgumentParser(description='Use Biomine-TV on the command line!')
+    parser.add_argument("-d", "--debug", action="store_true", dest="debug", default=False,
+                        help="logging level DEBUG")
+    parser.add_argument("--host", dest="host", default="localhost")
+    parser.add_argument("--port", dest="port", default=7890, type=int)
+    parser.add_argument("--include-keys", dest="include_keys", default=[], type=str, nargs='+',
+                        help="show these keys in the pretty-printed output", metavar="KEY")
+
+    opts = parser.parse_args()
 
     if opts.debug:
         logging.basicConfig(level=logging.DEBUG)
@@ -66,7 +68,7 @@ def main():
     try:
         while True:
             try:
-                read_show_loop(sock)
+                read_show_loop(sock, include_keys=opts.include_keys)
             except InvalidObject, ivo:
                 logger.error("Received invalid object!")
                 break
