@@ -5,7 +5,7 @@ from __future__ import print_function
 import logging
 import signal
 
-from optparse import OptionParser
+from argparse import ArgumentParser
 
 import gevent
 
@@ -15,23 +15,30 @@ from middleware import *
 logger = logging.getLogger("pyabboe")
 
 def main():
-    parser = OptionParser()
-    parser.add_option("-d", "--debug", action="store_true", dest="debug", default=False,
-                      help="logging level DEBUG")
-    opts, args = parser.parse_args()
+    parser = ArgumentParser()
+    parser.add_argument("--host", dest="host", default="localhost")
+    parser.add_argument("--port", dest="port", default=7890, type=int)
+    parser.add_argument("-d", "--debug", action="store_true", dest="debug", default=False,
+                        help="logging level DEBUG")
+    parser.add_argument("--link-to-servers", dest="servers", default=[], type=str, nargs='+',
+                        help="list of servers to link to", metavar="HOST:PORT")
+    opts = parser.parse_args()
 
     if opts.debug:
         logging.basicConfig(level=logging.DEBUG)
     logging.basicConfig(level=logging.INFO)
 
-    server = ObjectoPlex(("0.0.0.0", 7890),
+    server = ObjectoPlex((opts.host, opts.port),
                          middlewares=[
                              MOTDMiddleware(u"Welcome to pyabboe!"),
                              # StdErrMiddleware(),
                              StatisticsMiddleware(),
                              ChecksumMiddleware(),
                              RoutingMiddleware(),
-                             ])
+                             ],
+                         linked_servers=[(server.split(':')[0],
+                                          int(server.split(':')[1]))
+                                         for server in opts.servers])
     logger.info('Starting server at %s:%s', *(server.address[:2]))
     gevent.signal(signal.SIGTERM, server.stop)
     gevent.signal(signal.SIGINT, server.stop)

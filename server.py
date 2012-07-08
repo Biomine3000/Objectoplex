@@ -9,7 +9,10 @@ import socket
 import logging
 import signal
 
+from time import sleep
 from Queue import Queue
+from os import environ as env
+from datetime import datetime, timedelta
 
 import gevent
 
@@ -23,29 +26,50 @@ logger = logging.getLogger('server')
 
 
 class SystemClient(Greenlet):
-    def __init__(self, socket, address, gateway):
+    def __init__(self, socket, address, gateway, server=None):
         Greenlet.__init__(self)
 
         self.socket = socket
         self.address = address
         self.gateway = gateway
+        self.server = server
 
         self.queue = Queue()
 
     def _run(self):
         logger.info(u"Handling client from {0}".format(self.address))
 
+        if self.server is not None:
+            from middleware import make_routing_id
+            metadata = {'event': 'clients/register',
+                        'role': 'server',
+                        'routing-id': make_routing_id(),
+                        'receive': 'all',
+                        'subscriptions': 'all',
+                        'name': self.__class__.__name__,
+                        'user': env['USER']
+                        }
+            self.send(BusinessObject(metadata, None), None)
+
+        last_activity = datetime.now()
         while True:
+            if self.server is not None and \
+                   last_activity + timedelta(minutes=60) < datetime.now():
+                logger.warning(u"Closing connection {0} due to inactivity".format(self))
+                self.close()
+                return
+
             if not self.queue.empty():
-                rlist, wlist, xlist = select([self.socket], [self.socket], [], timeout=1)
+                rlist, wlist, xlist = select([self.socket], [self.socket], [], timeout=0.1)
             else:
-                rlist, wlist, xlist = select([self.socket], [], [], timeout=1)
+                rlist, wlist, xlist = select([self.socket], [], [], timeout=0.1)
 
             if not self.queue.empty() and len(wlist) == 1:
                 try:
                     obj = self.queue.get()
                     size, sent = obj.serialize(socket=self.socket)
                     logger.debug(u"Sent {0}/{1} of {2}".format(sent, size, obj))
+                    last_activity = datetime.now()
                 except socket.error, e:
                     if e[0] == errno.ECONNRESET or e[0] == errno.EPIPE:
                         logger.warning(u"Received {0} from {1}".format(e, self.address))
@@ -62,6 +86,7 @@ class SystemClient(Greenlet):
                         return
                     logger.debug(u"Successfully read object {0}".format(str(obj)))
                     self.gateway.send(obj, self)
+                    last_activity = datetime.now()
                 except socket.error, e:
                     if e[0] == errno.ECONNRESET or e[0] == errno.EPIPE:
                         logger.warning(u"Received {0} from {1}".format(e, self.address))
@@ -81,7 +106,7 @@ class SystemClient(Greenlet):
             pass
 
     def __unicode__(self):
-        return u'<{0} {1}>'.format(self.__class__.__name__, self.address)
+        return u'<{0} {1}, server: {2}>'.format(self.__class__.__name__, self.address, self.server)
 
     def __str__(self):
         return unicode(self).encode('ASCII', 'backslashreplace')
@@ -94,7 +119,7 @@ class ObjectoPlex(StreamServer):
     defaults are StatisticsMiddleware, ChecksumMiddleware and
     MultiplexingMiddleware.
     """
-    def __init__(self, listener, middlewares=[], **kwargs):
+    def __init__(self, listener, middlewares=[], linked_servers=[], **kwargs):
         StreamServer.__init__(self, listener, **kwargs)
         self.clients = set()
 
@@ -105,6 +130,31 @@ class ObjectoPlex(StreamServer):
                                 MultiplexingMiddleware()]
         else:
             self.middlewares = middlewares
+
+        for linked_server in linked_servers:
+            while True:
+                try:
+                    self.open_link(linked_server)
+                    break
+                except Exception, e:
+                    logger.warning(u"Unable to connect to linked server: {0}".format(e))
+                sleep(10)
+
+    def open_link(self, listener):
+        logger.info(u"Connecting to server at {0}:{1}".format(*listener))
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect(listener)
+        logger.info(u"Socket opened to {0}:{1}".format(*listener))
+
+        client = SystemClient(sock, listener, self, server=True)
+        gevent.signal(signal.SIGTERM, client.kill)
+        gevent.signal(signal.SIGINT, client.kill)
+
+        self.clients.add(client)
+        client.host = listener[0]
+        client.port = listener[1]
+        client.start()
+        logger.info(u"Connected to server at {0}:{1}".format(*listener))
 
     def handle(self, source, address):
         client = SystemClient(source, address, self)
@@ -131,3 +181,7 @@ class ObjectoPlex(StreamServer):
 
         for middleware in self.middlewares:
             middleware.disconnect(client, set(self.clients))
+
+        if client.server is not None:
+            sleep(10)
+            self.open_link((client.host, client.port))

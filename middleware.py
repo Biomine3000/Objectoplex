@@ -166,6 +166,11 @@ def promote_to_routed_system_client(client, obj):
         logger.info(u"Client {0} registered".format(client))
         return make_registration_reply(client, None, client.routing_id)
 
+    if 'role' in obj.metadata and obj.metadata['role'] == 'server':
+        if 'route' in obj.metadata and len(route) == 1 or \
+           'route' not in obj.metadata:
+            client.server = True
+
     client.receive = obj.metadata.get('receive', 'all')
     client.subscriptions = obj.metadata.get('subscriptions', 'all')
 
@@ -224,6 +229,9 @@ class RoutingMiddleware(Middleware):
         if obj.event == 'clients/register':
             self.register(obj, sender, clients)
 
+        if not isinstance(sender, RoutedSystemClient):
+            promote_to_routed_system_client(sender, None)
+
         return self.route(obj, sender, clients)
 
     def connect(self, client, clients):
@@ -239,57 +247,73 @@ class RoutingMiddleware(Middleware):
             route = []
             obj.metadata['route'] = route
 
-        if len(route) > 0:
-            if self.routing_id in route:
-                logger.info("Dropping object %s; loop!" % obj)
-                return None
-        elif len(route) == 0:
-            route.append(sender.routing_id)
+        if self.routing_id in route:
+            return False
 
+        if len(route) == 0:
+            route.append(sender.routing_id)
         route.append(self.routing_id)
 
         for recipient in clients:
-            # if 'to' in obj.metadata:
-            #     print(obj.metadata)
-            #     print(self.should_route_to(obj, sender, recipient), recipient)
-            if self.should_route_to(obj, sender, recipient):
+            print('---')
+            print(obj.metadata)
+            print(self.should_route_to(obj, sender, recipient), recipient)
+            print('---')
+            if self.should_route_to(obj, sender, recipient)[0]:
                 recipient.send(obj, sender)
 
     def should_route_to(self, obj, sender, recipient):
+        if 'route' in obj.metadata:
+            if isinstance(recipient, RoutedSystemClient) and \
+                   recipient.routing_id in obj.metadata['route']:
+                return False, 'recipient.routing_id in route'
+
+        if recipient.server is not None:
+            return True, 'recipient is server'
+
         if 'to' in obj.metadata:
             if not recipient.has_routing_id(obj.metadata['to']):
-                return False
-        
+                return False, "recipient doesn't have routing id for to field"
+
         receive = recipient.receive
         subscriptions = recipient.subscriptions
 
+        reason = []
         should = None
 
         if receive == "none":
             should = False
+            reason.append('receive is none')
 
         elif receive == "no_echo":
             if sender is recipient:
                 should = False
+                reason.append('receive is no_echo and sender is recipient')
             else:
                 should = True
+                reason.append("receive is no_echo and sender isn't recipient")
 
         elif receive == "events_only":
             if obj.event is not None:
                 should = True
+                reason.append("receive is events_only and this is an event")
             else:
                 should = False
+                reason.append("receive is events_only and this is not an event")
 
         elif receive == "all":
+            reason.append("receive is all")
             should = True
 
         if should:
             if 'subscriptions' == "none":
                 should = False
+                reason.append("subscriptions is none")
             elif 'subscriptions' == "all":
                 should = True
+                reason.append("subscriptions is all")
 
-        return should
+        return should, '; '.join(reason)
 
     def register(self, obj, client, clients):
         """
