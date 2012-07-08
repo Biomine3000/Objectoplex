@@ -3,7 +3,7 @@ import urllib2
 from codecs import getreader
 
 from system import BusinessObject
-from service import Service
+from service import Service, timeout
 
 
 class Oberst(Service):
@@ -13,10 +13,10 @@ class Oberst(Service):
         self.logger.debug(u"Request {0}".format(obj.metadata))
 
         try:
-            out = urllib2.urlopen('http://biomine.cs.helsinki.fi/oberstdorf/?plain=true')
-            reader = getreader('utf-8')(out)
-            title = reader.read()
-
+            with timeout(5):
+                out = urllib2.urlopen('http://biomine.cs.helsinki.fi/oberstdorf/?plain=true')
+                reader = getreader('utf-8')(out)
+                title = reader.read()
 
             metadata = {'event': 'services/reply',
                         'in-reply-to': obj.id,
@@ -26,7 +26,9 @@ class Oberst(Service):
             if 'route' in obj.metadata:
                 metadata['to'] = obj.metadata['route'][0]
 
-            return BusinessObject(metadata, bytearray(title, encoding='utf-8'))
+            reply = BusinessObject(metadata, bytearray(title, encoding='utf-8'))
+            self.logger.debug(u"Reply {0}".format(reply.metadata))
+            return reply
         except Exception, e:
             logger.error(u"{0}".format(e))
 

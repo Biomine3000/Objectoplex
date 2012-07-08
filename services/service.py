@@ -2,10 +2,34 @@
 import logging
 import socket
 import select
+import signal
+import errno
+import fcntl
 
+from contextlib import contextmanager
+from Queue import Queue
 from time import sleep
 
 from system import BusinessObject, InvalidObject
+
+
+@contextmanager
+def timeout(seconds):
+    """
+    Raises IOError with e.errno == errno.EINTR when it times out.
+    """
+    def timeout_handler(signum, frame):
+        pass
+
+    original_handler = signal.signal(signal.SIGALRM, timeout_handler)
+
+    try:
+        signal.alarm(seconds)
+        yield
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, original_handler)
+
 
 class _MetaService(type):
     def __new__(cls, clsname, clsbases, clsdict):  
@@ -28,6 +52,7 @@ class Service(object):
         self.host = host
         self.port = port
         self.logger = logging.getLogger(self.__class__.__service__)
+        self.queue = Queue()
 
     def start(self):
         self.connect()
@@ -51,24 +76,27 @@ class Service(object):
                 self.receive()
             except socket.error, e:
                 self.logger.warning(u"{0}:{1}; {2}".format(self.host, self.port, e))
-            sleep(30)
+            sleep(10)
 
     def receive(self):
         while True:
             try:
-                rlist, wlist, xlist = select.select([self.socket], [], [], 1)
-                if len(rlist) > 0:
-                    obj = BusinessObject.read_from_socket(self.socket)
-                    if obj is None:
-                        raise InvalidObject
-                    if self.should_handle(obj):
-                        response = self.handle(obj)
-                        if response is not None:
-                            response.serialize(socket=self.socket)
+                if not self.queue.empty():
+                    rlist, wlist, xlist = select.select([self.socket], [self.socket], [], 0.1)
+                    if len(wlist) > 0:
+                        obj = self.queue.get()
+                        obj.serialize(socket=self.socket)
                 else:
-                    # TODO: implement functionality for other than pure stimuli induced behavior
-                    pass
-
+                    rlist, wlist, xlist = select.select([self.socket], [], [], 0.1)
+                    if len(rlist) > 0:
+                        obj = BusinessObject.read_from_socket(self.socket)
+                        if obj is None:
+                            raise InvalidObject
+                        if self.should_handle(obj):
+                            response = self.handle(obj)
+                            if response is not None:
+                                self.queue.put(response)
+                # TODO: implement functionality for other than pure stimuli induced behavior
             except InvalidObject, ivo:
                 self.socket.close()
                 break
