@@ -31,13 +31,19 @@ def raw_print(writable, file=stdout):
         writer.flush()
         file.flush()
 
-def print_discovery_result(replies):
+def print_discovery_result(replies, readable=False):
     if len(replies) == 0:
         print(u"No services discovered!")
         return
-    print(u"{0}\t{1}".format('SERVICE', 'ROUTING ID'))
+
+    if readable:
+        format_string = u"{0:<24}{1:<30}"
+        print(format_string.format('SERVICE', 'ROUTING ID'))
+    else:
+        format_string = u"{0}\t{1}"
+
     for obj in replies:
-        print(u"{0}\t{1}".format(obj.metadata['name'], obj.metadata['route'][0]))
+        print(format_string.format(obj.metadata['name'], obj.metadata['route'][0]))
 
 def main():
     parser = ArgumentParser(description='Make object system service calls')
@@ -110,7 +116,7 @@ def main():
     while True:
         rlist, wlist, xlist = select.select([sock], [], [], 1)
         if datetime.now() - timedelta(seconds=3) > started:
-            print_discovery_result(discovery_replies)
+            print_discovery_result(discovery_replies, opts.readably)
             break
         elif len(rlist) > 0:
             resp = BusinessObject.read_from_socket(sock)
