@@ -288,10 +288,10 @@ class RoutingMiddleware(Middleware):
         route.append(self.routing_id)
 
         for recipient in clients:
-            print('---')
-            print(obj.metadata)
-            print(self.should_route_to(obj, sender, recipient), recipient)
-            print('---')
+            # print('---')
+            # print(obj.metadata)
+            # print(self.should_route_to(obj, sender, recipient), recipient)
+            # print('---')
             if self.should_route_to(obj, sender, recipient)[0]:
                 recipient.send(obj, sender)
 

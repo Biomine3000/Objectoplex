@@ -87,10 +87,10 @@ class BusinessObject(object):
             return False
 
     def __unicode__(self):
-        if self.of_content_type('text') and not self.event:
+        if self.of_content_type('text') and self.payload and not self.event:
             return u'<{0} {1} "{2}">'.format(self.__class__.__name__, self.content_type,
                                              self.text_payload_snippet().replace('\n', ' '))
-        elif self.of_content_type('text') and self.event:
+        elif self.of_content_type('text') and self.payload and self.event:
             return u'<{0} {1}; {2} "{3}">'.format(self.__class__.__name__, self.content_type,
                                                   self.event,
                                                   self.text_payload_snippet().replace('\n', ' '))
