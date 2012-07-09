@@ -8,6 +8,7 @@ from datetime import datetime
 from collections import defaultdict
 from uuid import uuid4
 from os import environ as env
+from random import choice
 
 from system import BusinessObject
 from server import SystemClient
@@ -173,6 +174,7 @@ def promote_to_routed_system_client(client, obj):
     client.extra_routing_ids = []
     client.receive = "all"
     client.subscriptions = "all"
+    client.service = None
 
 def make_registration_notification(client, obj, routing_id):
     payload = None
@@ -194,6 +196,11 @@ def make_registration_notification(client, obj, routing_id):
 
     return BusinessObject(metadata, payload)
 
+def make_service_registration_notification(client, routing_id):
+    return BusinessObject({ 'event': 'services/register/notify',
+                            'routing-id': routing_id,
+                            'name': client.service }, None)
+
 def make_part_notification(client, routing_id):
     return BusinessObject({ 'event': 'clients/part/notify',
                             'routing-id': routing_id }, None)
@@ -214,6 +221,8 @@ class RoutingMiddleware(Middleware):
 
     def handle(self, obj, sender, clients):
         if obj.event == 'clients/register':
+            self.register(obj, sender, clients)
+        elif obj.event == 'services/register':
             self.register(obj, sender, clients)
 
         if not isinstance(sender, RoutedSystemClient):
@@ -238,6 +247,12 @@ class RoutingMiddleware(Middleware):
             return self.register_without_message(client, clients)
 
     def register_with_message(self, obj, client, clients):
+        if obj.event == 'clients/register':
+            return self.register_client(obj, client, clients)
+        elif obj.event == 'services/register':
+            return self.register_service(obj, client, clients)
+
+    def register_client(self, obj, client, clients):
         if 'routing-ids' in obj.metadata:
             routing_ids = obj.metadata['routing-ids']
             if isinstance(routing_ids, basestring):
@@ -265,6 +280,19 @@ class RoutingMiddleware(Middleware):
             logger.info(u"Client {0} registered".format(client))
             return make_registration_notification(client, obj, client.routing_id)
 
+    def register_service(self, obj, client, clients):
+        if 'name' not in obj.metadata:
+            logger.warning(u"services/register without 'name' from {0}".format(client))
+        client.service = obj.metadata['name']
+
+        if 'route' in obj.metadata:
+            routing_id = obj.metadata['route'][0]
+        else:
+            routing_id = client.routing_id
+
+        logger.info(u"Service {0} registered".format(client))
+        return make_service_registration_notification(client, routing_id)
+
     def register_without_message(self, client, clients):
         if client.server:
             logger.info(u"Server {0} registered".format(client))
@@ -287,6 +315,16 @@ class RoutingMiddleware(Middleware):
             route.append(sender.routing_id)
         route.append(self.routing_id)
 
+        if obj.event == 'services/request':
+            status, reason = self.route_service_request(obj, sender, clients)[0]
+            # print('---')
+            # print(obj.metadata)
+            # print(status)
+            # print(reason)
+            # print('---')
+            if status is True:
+                return
+
         for recipient in clients:
             # print('---')
             # print(obj.metadata)
@@ -294,6 +332,27 @@ class RoutingMiddleware(Middleware):
             # print('---')
             if self.should_route_to(obj, sender, recipient)[0]:
                 recipient.send(obj, sender)
+
+    def route_service_request(self, obj, sender, clients):
+        service_name = obj.metadata.get('name', None)
+
+        if not isinstance(service_name, basestring):
+            return False, 'no proper service name specified in object'
+
+        possible_targets = [client
+                            for client in clients
+                            if client.service == service_name]
+
+        try:
+            target = choice(possible_targets)
+        except IndexError, ie:
+            target = None
+
+        if target is None:
+            return False, u'no service targets found for {0}'.format(service_name)
+
+        target.send(obj, sender)
+        return True, 'found target'
 
     def should_route_to(self, obj, sender, recipient):
         if 'route' in obj.metadata:
