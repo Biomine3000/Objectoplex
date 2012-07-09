@@ -33,6 +33,8 @@ def main():
     parser = ArgumentParser(description='Make object system service calls')
     parser.add_argument('call', metavar='CALL', nargs=1,
                         help='Service to call')
+    parser.add_argument('arg', metavar='ARG', nargs='*',
+                        help='arguments to call')
 
     parser.add_argument("--host", dest="host", default="localhost")
     parser.add_argument("--port", dest="port", default=7890, type=int)
@@ -53,6 +55,16 @@ def main():
         logger.debug("Debug logging turned on!")
     logging.basicConfig(level=logging.INFO)
 
+    options = {}
+    arguments = []
+    for item in opts.arg:
+        if '=' in item:
+            k, v = item.split('=', 1)
+            options[k] = v
+        else:
+            arguments.append(item)
+    logger.debug(u"Calling {0} with options: {1} and arguments: {2}".format(opts.call, options, arguments))
+
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect((opts.host, opts.port))
 
@@ -67,8 +79,14 @@ def main():
     reg.serialize(socket=sock)
     logger.debug("Sent registration object: {0}".format(reg.metadata))
 
-    req = BusinessObject({'event': 'services/request', 'name': opts.call[0]},
-                         None)
+    metadata = {'event': 'services/request',
+                'name': opts.call[0],
+                'arguments': arguments }
+    for k, v in options.iteritems():
+        if k not in metadata:
+            metadata[k] = v
+
+    req = BusinessObject(metadata, None)
     req.serialize(sock)
 
     logger.debug(u"Sent service call: {0}".format(req.metadata))
