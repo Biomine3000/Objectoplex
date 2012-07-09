@@ -225,7 +225,8 @@ class RoutingMiddleware(Middleware):
         self.route(self.register(None, client, clients), client, clients)
 
     def disconnect(self, client, clients):
-        self.route(make_part_notification(client, client.routing_id), client, clients)
+        if isinstance(client, RoutedSystemClient):
+            self.route(make_part_notification(client, client.routing_id), client, clients)
 
     def register(self, obj, client, clients):
         if not isinstance(client, RoutedSystemClient):
