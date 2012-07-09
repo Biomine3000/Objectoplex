@@ -30,6 +30,6 @@ class Oberst(Service):
             self.logger.debug(u"Reply {0}".format(reply.metadata))
             return reply
         except Exception, e:
-            logger.error(u"{0}".format(e))
+            self.logger.error(u"{0}".format(e))
 
 service = Oberst
