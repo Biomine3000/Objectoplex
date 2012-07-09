@@ -268,7 +268,7 @@ class RoutingMiddleware(Middleware):
                    recipient.routing_id in obj.metadata['route']:
                 return False, 'recipient.routing_id in route'
 
-        if recipient.server is not None:
+        if recipient.server:
             return True, 'recipient is server'
 
         if 'to' in obj.metadata:

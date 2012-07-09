@@ -82,12 +82,12 @@ class Service(object):
         while True:
             try:
                 if not self.queue.empty():
-                    rlist, wlist, xlist = select.select([self.socket], [self.socket], [], 0.1)
+                    rlist, wlist, xlist = select.select([self.socket], [self.socket], [], 0.2)
                     if len(wlist) > 0:
                         obj = self.queue.get()
                         obj.serialize(socket=self.socket)
                 else:
-                    rlist, wlist, xlist = select.select([self.socket], [], [], 0.1)
+                    rlist, wlist, xlist = select.select([self.socket], [], [], 0.2)
                     if len(rlist) > 0:
                         obj = BusinessObject.read_from_socket(self.socket)
                         if obj is None:

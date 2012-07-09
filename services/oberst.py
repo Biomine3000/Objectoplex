@@ -14,9 +14,10 @@ class Oberst(Service):
 
         try:
             with timeout(5):
-                out = urllib2.urlopen('http://biomine.cs.helsinki.fi/oberstdorf/?plain=true')
-                reader = getreader('utf-8')(out)
-                title = reader.read()
+                # out = urllib2.urlopen('http://biomine.cs.helsinki.fi/oberstdorf/?plain=true')
+                # reader = getreader('utf-8')(out)
+                # title = reader.read()
+                title = 'foo'
 
             metadata = {'event': 'services/reply',
                         'in-reply-to': obj.id,

@@ -26,7 +26,7 @@ logger = logging.getLogger('server')
 
 
 class SystemClient(Greenlet):
-    def __init__(self, socket, address, gateway, server=None):
+    def __init__(self, socket, address, gateway, server=False):
         Greenlet.__init__(self)
 
         self.socket = socket
@@ -39,7 +39,7 @@ class SystemClient(Greenlet):
     def _run(self):
         logger.info(u"Handling client from {0}".format(self.address))
 
-        if self.server is not None:
+        if self.server:
             from middleware import make_routing_id
             metadata = {'event': 'clients/register',
                         'role': 'server',
@@ -53,16 +53,15 @@ class SystemClient(Greenlet):
 
         last_activity = datetime.now()
         while True:
-            if self.server is not None and \
-                   last_activity + timedelta(minutes=60) < datetime.now():
+            if self.server and last_activity + timedelta(minutes=60) < datetime.now():
                 logger.warning(u"Closing connection {0} due to inactivity".format(self))
                 self.close()
                 return
 
             if not self.queue.empty():
-                rlist, wlist, xlist = select([self.socket], [self.socket], [], timeout=0.1)
+                rlist, wlist, xlist = select([self.socket], [self.socket], [], timeout=0.2)
             else:
-                rlist, wlist, xlist = select([self.socket], [], [], timeout=0.1)
+                rlist, wlist, xlist = select([self.socket], [], [], timeout=0.2)
 
             if not self.queue.empty() and len(wlist) == 1:
                 try:
@@ -76,7 +75,7 @@ class SystemClient(Greenlet):
                         self.close()
                         return
                     raise e
-            elif len(rlist) == 1:
+            if len(rlist) == 1:
                 logger.debug(u"Attempting to read an object from {0}".format(self.socket))
                 try:
                     obj = BusinessObject.read_from_socket(self.socket)
@@ -182,6 +181,5 @@ class ObjectoPlex(StreamServer):
         for middleware in self.middlewares:
             middleware.disconnect(client, set(self.clients))
 
-        if client.server is not None:
-            sleep(10)
+        if client.server:
             self.open_link((client.host, client.port))
