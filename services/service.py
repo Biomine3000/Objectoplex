@@ -92,7 +92,11 @@ class Service(object):
                         obj = BusinessObject.read_from_socket(self.socket)
                         if obj is None:
                             raise InvalidObject
-                        if self.should_handle(obj):
+                        if obj.event == 'services/discovery':
+                            response = self.handle_discovery(obj)
+                            if response is not None:
+                                self.queue.put(response)
+                        elif self.should_handle(obj):
                             response = self.handle(obj)
                             if response is not None:
                                 self.queue.put(response)
@@ -109,6 +113,16 @@ class Service(object):
                obj.metadata.get('name', None) != self.__class__.__service__:
             return False
         return True
+
+    def handle_discovery(self, obj):
+        metadata = { 'event': "services/discovery/reply",
+                     'name': self.__class__.__service__,
+                     'in-reply-to': obj.id }
+
+        if 'route' in obj.metadata:
+            metadata['to'] = obj.metadata['route'][0]
+
+        return BusinessObject(metadata, None)
 
     def handle(self, obj):
         pass

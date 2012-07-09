@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-from __future__ import with_statement
+from __future__ import with_statement, print_function
 
 import socket
 import select
@@ -13,6 +13,8 @@ from time import sleep
 from os import environ as env
 from sys import stdout, stderr
 from codecs import getwriter
+from datetime import datetime, timedelta
+
 from system import BusinessObject, InvalidObject
 from tv import print_readably
 
@@ -28,6 +30,14 @@ def raw_print(writable, file=stdout):
         writer.write(writable)
         writer.flush()
         file.flush()
+
+def print_discovery_result(replies):
+    if len(replies) == 0:
+        print(u"No services discovered!")
+        return
+    print(u"{0}\t{1}".format('service name', 'routing-id'))
+    for obj in replies:
+        print(u"{0}\t{1}".format(obj.metadata['name'], obj.metadata['route'][0]))
 
 def main():
     parser = ArgumentParser(description='Make object system service calls')
@@ -79,9 +89,13 @@ def main():
     reg.serialize(socket=sock)
     logger.debug("Sent registration object: {0}".format(reg.metadata))
 
-    metadata = {'event': 'services/request',
-                'name': opts.call[0],
-                'arguments': arguments }
+    if opts.call[0] == 'discovery':
+        metadata = {'event': 'services/discovery'}
+    else:
+        metadata = {'event': 'services/request',
+                    'name': opts.call[0],
+                    'arguments': arguments }
+
     for k, v in options.iteritems():
         if k not in metadata:
             metadata[k] = v
@@ -91,12 +105,19 @@ def main():
 
     logger.debug(u"Sent service call: {0}".format(req.metadata))
 
+    started = datetime.now()
+    discovery_replies = []
     while True:
         rlist, wlist, xlist = select.select([sock], [], [], 1)
-        if len(rlist) > 0:
+        if datetime.now() - timedelta(seconds=3) > started:
+            print_discovery_result(discovery_replies)
+            break
+        elif len(rlist) > 0:
             resp = BusinessObject.read_from_socket(sock)
             if resp is None:
                 raise InvalidObject
+            elif resp.event == 'services/discovery/reply':
+                discovery_replies.append(resp)
             elif resp.event == 'services/reply' and \
                    resp.metadata.get('in-reply-to') == req.id:
                 if opts.payload_only:
@@ -122,4 +143,4 @@ if __name__ == '__main__':
     try:
         main()
     except KeyboardInterrupt, ke:
-        print "Exiting."
+        print("Exiting.")
