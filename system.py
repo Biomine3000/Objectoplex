@@ -100,12 +100,16 @@ class BusinessObject(object):
             return u'<{0} {1}>'.format(self.__class__.__name__, self.content_type)
 
     def text_payload_snippet(self, max_length=120):
-        if 'charset' in self.content_type.metadata:
-            charset = self.content_type.metadata['charset']
-        else:
+        charset = self.content_type.metadata.get('charset', 'utf-8')
+        if charset is None:
             charset = 'utf-8'
 
-        ret = self.payload.decode(charset).encode('ASCII', 'backslashreplace')
+        try:
+            ret = self.payload.decode(charset).encode('ASCII', 'backslashreplace')
+        except Exception, e:
+            logger.error(u"{0} while decoding payload with charset {1}".format(e, charset))
+            return u''
+
         if len(ret) > max_length:
             ret = ret[:max_length - 3] + '...'
         return ret
