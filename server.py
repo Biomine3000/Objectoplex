@@ -8,6 +8,7 @@ import errno
 import socket
 import logging
 import signal
+import traceback
 
 from time import sleep
 from Queue import Queue
@@ -40,9 +41,8 @@ class SystemClient(Greenlet):
 
         last_activity = datetime.now()
         while True:
-            if self.server and last_activity + timedelta(minutes=60) < datetime.now():
-                logger.warning(u"Closing connection {0} due to inactivity".format(self))
-                self.close()
+            if self.server and last_activity + timedelta(minutes=30) < datetime.now():
+                self.close('inactivity')
                 return
 
             if not self.queue.empty():
@@ -58,8 +58,8 @@ class SystemClient(Greenlet):
                     last_activity = datetime.now()
                 except socket.error, e:
                     if e[0] == errno.ECONNRESET or e[0] == errno.EPIPE:
-                        logger.warning(u"Received {0} from {1}".format(e, self.address))
-                        self.close()
+                        logger.warning()
+                        self.close(u"{0}".format(e))
                         return
                     raise e
             if len(rlist) == 1:
@@ -67,29 +67,28 @@ class SystemClient(Greenlet):
                 try:
                     obj = BusinessObject.read_from_socket(self.socket)
                     if obj is None:
-                        logger.error(u"Couldn't read object from {0}, closing!".format(self.socket))
-                        self.close()
+                        self.close("couldn't read object")
                         return
                     logger.debug(u"Successfully read object {0}".format(str(obj)))
                     self.gateway.send(obj, self)
                     last_activity = datetime.now()
                 except socket.error, e:
                     if e[0] == errno.ECONNRESET or e[0] == errno.EPIPE:
-                        logger.warning(u"Received {0} from {1}".format(e, self.address))
-                        self.close()
+                        self.close(u"{0}".format(e))
                         return
                     raise e
 
     def send(self, message, sender):
         self.queue.put(message)
 
-    def close(self):
+    def close(self, message=""):
         try:
-            logger.warning(u"Closing connection to {0}".format(self.address))
+            logger.warning(u"Closing connection to {0} due to {1}".format(self.address, message))
             self.gateway.unregister(self)
             self.socket.close()
-        except:
-            pass
+        except Exception, e:
+            traceback.print_exc()
+            logger.error(u"Got {0} while trying to close and unregister a client!".format(e))
 
     def __unicode__(self):
         return u'<{0} {1}, server: {2}>'.format(self.__class__.__name__, self.address, self.server)
@@ -118,15 +117,19 @@ class ObjectoPlex(StreamServer):
             self.middlewares = middlewares
 
         for linked_server in linked_servers:
-            while True:
-                try:
-                    self.open_link(linked_server)
-                    break
-                except Exception, e:
-                    logger.warning(u"Unable to connect to linked server: {0}".format(e))
-                sleep(10)
+            self.open_link(linked_server)
 
-    def open_link(self, listener):
+    def open_link(self, server):
+        while True:
+            try:
+                self._open_link_helper(server)
+                break
+            except socket.error, e:
+                logger.warning(u"Unable to connect to linked server {0}: {1}".format(server, e))
+
+            sleep(10)
+
+    def _open_link_helper(self, listener):
         logger.info(u"Connecting to server at {0}:{1}".format(*listener))
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.connect(listener)
@@ -148,7 +151,11 @@ class ObjectoPlex(StreamServer):
         gevent.signal(signal.SIGINT, client.kill)
 
         for middleware in self.middlewares:
-            middleware.connect(client, set(self.clients))
+            try:
+                middleware.connect(client, set(self.clients))
+            except Exception, e:
+                traceback.print_exc()
+                logger.error(u"Got {0} while calling {1}.handle!".format(e, middleware))
 
         self.clients.add(client)
 
@@ -158,15 +165,23 @@ class ObjectoPlex(StreamServer):
         logger.info(u"{0}: {1}".format(sender, message))
 
         for middleware in self.middlewares:
-            message = middleware.handle(message, sender, set(self.clients))
-            if message is None:
-                break
+            try:
+                message = middleware.handle(message, sender, set(self.clients))
+                if message is None:
+                    break
+            except Exception, e:
+                traceback.print_exc()
+                logger.error(u"Got {0} while calling {1}.handle!".format(e, middleware))
 
     def unregister(self, client):
         self.clients.remove(client)
 
         for middleware in self.middlewares:
-            middleware.disconnect(client, set(self.clients))
+            try:
+                middleware.disconnect(client, set(self.clients))
+            except Exception, e:
+                traceback.print_exc()
+                logger.error(u"Got {0} while calling {1}.disconnect!".format(e, middleware))
 
         if client.server:
             self.open_link((client.host, client.port))
