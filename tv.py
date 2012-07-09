@@ -41,8 +41,11 @@ def format_readably(obj, file=None, no_payload=False, include=set(), exclude=set
            obj.of_content_type('text') and \
            'size' in obj.metadata and \
            obj.metadata['size'] > 0:
-        charset = obj.content_type.metadata.get('charset', 'utf-8')
-        text = unicode(obj.payload.decode(charset))
+        charset = obj.content_type.metadata['charset']
+        if charset is None:
+            text = unicode(obj.payload.decode('utf-8'))
+        else:
+            text = unicode(obj.payload.decode(charset))
 
     print_keys = set()
 
