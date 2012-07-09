@@ -35,7 +35,7 @@ def print_discovery_result(replies):
     if len(replies) == 0:
         print(u"No services discovered!")
         return
-    print(u"{0}\t{1}".format('service name', 'routing-id'))
+    print(u"{0}\t{1}".format('SERVICE', 'ROUTING ID'))
     for obj in replies:
         print(u"{0}\t{1}".format(obj.metadata['name'], obj.metadata['route'][0]))
 
