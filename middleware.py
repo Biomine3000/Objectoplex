@@ -7,6 +7,7 @@ import logging
 from datetime import datetime
 from collections import defaultdict
 from uuid import uuid4
+from os import environ as env
 
 from system import BusinessObject
 from server import SystemClient
@@ -154,6 +155,17 @@ def make_registration_reply(client, obj, routing_id):
 
     return BusinessObject(metadata, payload)
 
+def make_server_registration():
+    metadata = {'event': 'clients/register',
+                'role': 'server',
+                'routing-id': make_routing_id(),
+                'receive': 'all',
+                'subscriptions': 'all',
+                'name': 'Objectoplex',
+                'user': env['USER']
+                }
+    return BusinessObject(metadata, None)
+
 def promote_to_routed_system_client(client, obj):
     client.__class__ = RoutedSystemClient
 
@@ -161,31 +173,6 @@ def promote_to_routed_system_client(client, obj):
     client.extra_routing_ids = []
     client.receive = "all"
     client.subscriptions = "all"
-
-    if obj is None:
-        logger.info(u"Client {0} registered".format(client))
-        return make_registration_reply(client, None, client.routing_id)
-
-    if 'role' in obj.metadata and obj.metadata['role'] == 'server':
-        if 'route' in obj.metadata and len(route) == 1 or \
-           'route' not in obj.metadata:
-            client.server = True
-
-    client.receive = obj.metadata.get('receive', 'all')
-    client.subscriptions = obj.metadata.get('subscriptions', 'all')
-
-    if 'routing-ids' in obj.metadata:
-        routing_ids = obj.metadata['routing-ids']
-        if isinstance(routing_ids, basestring):
-            logger.error(u"Got {0} as routing-ids from {1}".format(routing_ids, client))
-        else:
-            for routing_id in routing_ids:
-                client.extra_routing_ids.append(routing_id)
-
-    # Send a registration reply
-    client.send(make_registration_reply(client, obj, client.routing_id), None)
-    logger.info(u"Client {0} registered".format(client))
-    return make_registration_notification(client, obj, client.routing_id)
 
 def make_registration_notification(client, obj, routing_id):
     payload = None
@@ -230,15 +217,60 @@ class RoutingMiddleware(Middleware):
             self.register(obj, sender, clients)
 
         if not isinstance(sender, RoutedSystemClient):
-            promote_to_routed_system_client(sender, None)
+            self.register(obj, sender, clients)
 
         return self.route(obj, sender, clients)
 
     def connect(self, client, clients):
-        self.route(self.register(None, client, None), client, clients)
+        self.route(self.register(None, client, clients), client, clients)
 
     def disconnect(self, client, clients):
         self.route(make_part_notification(client, client.routing_id), client, clients)
+
+    def register(self, obj, client, clients):
+        if not isinstance(client, RoutedSystemClient):
+            promote_to_routed_system_client(client, obj)
+
+        if obj is not None:
+            return self.register_with_message(obj, client, clients)
+        else:
+            return self.register_without_message(client, clients)
+
+    def register_with_message(self, obj, client, clients):
+        if 'routing-ids' in obj.metadata:
+            routing_ids = obj.metadata['routing-ids']
+            if isinstance(routing_ids, basestring):
+                logger.error(u"Got {0} as routing-ids from {1}".format(routing_ids, client))
+            else:
+                for routing_id in routing_ids:
+                    client.extra_routing_ids.append(routing_id)
+
+        client.receive = obj.metadata.get('receive', 'all')
+        client.subscriptions = obj.metadata.get('subscriptions', 'all')
+
+        if 'role' in obj.metadata and obj.metadata['role'] == 'server':
+            if 'route' in obj.metadata and len(route) == 1 or \
+                   'route' not in obj.metadata:
+                client.server = True
+            return obj
+
+        # Send a registration reply
+        if client.server:
+            client.send(make_server_registration(), None)
+            logger.info(u"Server {0} registered".format(client))
+            return obj
+        else:
+            client.send(make_registration_reply(client, obj, client.routing_id), None)
+            logger.info(u"Client {0} registered".format(client))
+            return make_registration_notification(client, obj, client.routing_id)
+
+    def register_without_message(self, client, clients):
+        if client.server:
+            logger.info(u"Server {0} registered".format(client))
+        else:
+            logger.info(u"Client {0} registered".format(client))
+
+        return make_registration_reply(client, None, client.routing_id)
 
     def route(self, obj, sender, clients):
         if 'route' in obj.metadata:
@@ -314,13 +346,6 @@ class RoutingMiddleware(Middleware):
                 reason.append("subscriptions is all")
 
         return should, '; '.join(reason)
-
-    def register(self, obj, client, clients):
-        """
-        Implements registration of clients' routing options.
-        """
-        return promote_to_routed_system_client(client, obj)
-
 
 
 class MOTDMiddleware(Middleware):

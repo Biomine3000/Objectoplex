@@ -11,7 +11,6 @@ import signal
 
 from time import sleep
 from Queue import Queue
-from os import environ as env
 from datetime import datetime, timedelta
 
 import gevent
@@ -38,18 +37,6 @@ class SystemClient(Greenlet):
 
     def _run(self):
         logger.info(u"Handling client from {0}".format(self.address))
-
-        if self.server:
-            from middleware import make_routing_id
-            metadata = {'event': 'clients/register',
-                        'role': 'server',
-                        'routing-id': make_routing_id(),
-                        'receive': 'all',
-                        'subscriptions': 'all',
-                        'name': self.__class__.__name__,
-                        'user': env['USER']
-                        }
-            self.send(BusinessObject(metadata, None), None)
 
         last_activity = datetime.now()
         while True:
