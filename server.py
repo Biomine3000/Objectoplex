@@ -54,7 +54,7 @@ class SystemClient(Greenlet):
                 try:
                     obj = self.queue.get()
                     size, sent = obj.serialize(socket=self.socket)
-                    logger.debug(u"Sent {0}/{1} of {2}".format(sent, size, obj))
+                    # logger.debug(u"Sent {0}/{1} of {2}".format(sent, size, obj))
                     last_activity = datetime.now()
                 except socket.error, e:
                     if e[0] == errno.ECONNRESET or e[0] == errno.EPIPE:
@@ -63,13 +63,13 @@ class SystemClient(Greenlet):
                         return
                     raise e
             if len(rlist) == 1:
-                logger.debug(u"Attempting to read an object from {0}".format(self.socket))
+                # logger.debug(u"Attempting to read an object from {0}".format(self.socket))
                 try:
                     obj = BusinessObject.read_from_socket(self.socket)
                     if obj is None:
                         self.close("couldn't read object")
                         return
-                    logger.debug(u"Successfully read object {0}".format(str(obj)))
+                    # logger.debug(u"Successfully read object {0}".format(str(obj)))
                     self.gateway.send(obj, self)
                     last_activity = datetime.now()
                 except socket.error, e:
