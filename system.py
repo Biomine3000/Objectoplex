@@ -206,7 +206,7 @@ class BusinessObject(object):
 
                 assert(len(payload) == metadata_dict['size'])
             else:
-                logger.debug("Not reading payload")
+                # logger.debug("Not reading payload")
                 payload = None
 
             return BusinessObject(metadata_dict, payload)
