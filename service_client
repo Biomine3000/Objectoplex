@@ -115,7 +115,7 @@ def main():
     discovery_replies = []
     while True:
         rlist, wlist, xlist = select.select([sock], [], [], 1)
-        if datetime.now() - timedelta(seconds=3) > started:
+        if opts.call[0] == 'discovery' and datetime.now() - timedelta(seconds=3) > started:
             print_discovery_result(discovery_replies, opts.readably)
             break
         elif len(rlist) > 0:
