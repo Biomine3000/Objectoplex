@@ -376,3 +376,43 @@ class MOTDMiddleware(Middleware):
                                     'size': len(self.payload),
                                     'sender': 'pyabboe'},
                                    self.payload), None)
+
+
+class LegacySubscriptionMiddleware(Middleware):
+    def handle(self, obj, sender, clients):
+        if obj.event != 'clients/register':
+            return obj
+
+        self.handle_legacy_registration(obj, sender, clients)
+
+    def handle_legacy_registration(self, obj, sender, clients):
+        client = sender
+
+        if not isinstance(client, RoutedSystemClient):
+            promote_to_routed_system_client(client, obj)
+
+        if 'route' in obj.metadata and len(obj.metadata['route']) > 1:
+            return obj
+
+        if 'routing-ids' in obj.metadata:
+            routing_ids = obj.metadata['routing-ids']
+            if isinstance(routing_ids, basestring):
+                logger.error(u"Got {0} as routing-ids from {1}".format(routing_ids, client))
+            else:
+                for routing_id in routing_ids:
+                    client.extra_routing_ids.append(routing_id)
+
+        client.receive = obj.metadata.get('receive', 'all')
+        client.subscriptions = obj.metadata.get('subscriptions', 'all')
+
+        logger.info(u"Legacy client {0} registered".format(client))
+
+        if client.receive != "none" and client.subscriptions != "none":
+            client.send(BusinessObject({ 'event': 'clients/register/reply',
+                                         'routing-id': sender.routing_id }, None), None)
+
+        return BusinessObject({ 'event': 'services/request',
+                                'name': 'clients',
+                                'request': 'join',
+                                'client': obj.metadata.get('name', 'no-client'),
+                                'user': obj.metadata.get('user', 'no-user') }, None)
