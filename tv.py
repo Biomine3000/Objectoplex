@@ -23,6 +23,14 @@ def registration_object(client_name, user_name):
         }
     return BusinessObject(metadata, None)
 
+def subscription_object():
+    metadata = {
+        'event': 'routing/subscribe',
+        'receive_mode': 'all',
+        'types': 'all',
+        }
+    return BusinessObject(metadata, None)
+
 def list_clients_object():
     metadata = {
         'event': 'services/request',

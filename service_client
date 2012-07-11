@@ -85,11 +85,9 @@ def main():
     sock.connect((opts.host, opts.port))
 
     metadata = {
-        'event': 'clients/register',
-        'receive': 'all',
-        'subscriptions': 'all',
-        'name': 'service_client',
-        'user': env['USER']
+        'event': 'routing/subscribe',
+        'receive_mode': 'all',
+        'types': 'all',
         }
     reg = BusinessObject(metadata, None)
     reg.serialize(socket=sock)

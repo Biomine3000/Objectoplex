@@ -199,7 +199,7 @@ class BusinessObject(object):
             metadata_dict = json.loads(metadata)
 
             if 'size' in metadata_dict and metadata_dict['size'] > 0:
-                logger.debug("Reading payload of size %i" % metadata_dict['size'])
+                # logger.debug("Reading payload of size %i" % metadata_dict['size'])
                 payload = bytearray()
                 while len(payload) < metadata_dict['size']:
                     payload.extend(socket.recv(metadata_dict['size'] - len(payload)))

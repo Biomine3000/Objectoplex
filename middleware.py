@@ -122,9 +122,6 @@ class StdErrMiddleware(Middleware):
 
 
 class RoutedSystemClient(SystemClient):
-    # {"name": "BiomineTV", "subscriptions": "all", "receive": "no_echo",
-    #  "event": "clients/register", "user": "gua",
-    #  "id": "<20120705155613.14376.94125@localhost>", "size": 0}
     def has_routing_id(self, routing_id):
         if self.routing_id == routing_id:
             return True
@@ -139,17 +136,21 @@ class RoutedSystemClient(SystemClient):
 
         super(RoutedSystemClient, self).send(message, sender)
 
+    @classmethod
+    def promote(cls, instance, obj=None):
+        if instance.__class__ == cls:
+            return
 
-def promote_to_routed_system_client(client, obj):
-    client.__class__ = RoutedSystemClient
+        instance.__class__ = cls
+        instance.routing_id = make_routing_id(registration_object=obj)
+        instance.extra_routing_ids = []
+        instance.receive_mode = "none"
+        instance.types = "all"
+        instance.service = None
+        instance.subscribed = False
+        instance.subscribed_to = False
 
-    client.routing_id = make_routing_id(registration_object=obj)
-    client.extra_routing_ids = []
-    client.receive = "all"
-    client.subscriptions = "all"
-    client.service = None
-
-def make_server_subscription(obj):
+def make_server_subscription(obj=None):
     metadata = {'event': 'routing/subscribe',
                 'role': 'server',
                 'routing-id': make_routing_id(obj),
@@ -159,8 +160,6 @@ def make_server_subscription(obj):
                 'user': env['USER']
                 }
     return BusinessObject(metadata, None)
-
-
 
 def make_routing_id(registration_object=None):
     if registration_object:
@@ -176,91 +175,131 @@ class RoutingMiddleware(Middleware):
     def __init__(self):
         self.routing_id = make_routing_id() # routing id of the server
 
-    def handle(self, obj, sender, clients):
-        if obj.event == 'routing/subscribe':
-            self.register(obj, sender, clients)
-        elif obj.event == 'services/register':
-            self.register(obj, sender, clients)
-
-        if not isinstance(sender, RoutedSystemClient):
-            self.register(obj, sender, clients)
-
-        return self.route(obj, sender, clients)
-
     def connect(self, client, clients):
-        self.route(self.register(None, client, clients), client, clients)
+        RoutedSystemClient.promote(client, None)
+
+        if client.server:
+            self.subscribe(None, client, clients)
+            logger.info(u"Server {0} connected!".format(client))
+        else:
+            logger.info(u"Client {0} connected!".format(client))
 
     def disconnect(self, client, clients):
-        if isinstance(client, RoutedSystemClient):
-            self.route(BusinessObject({ 'event': 'routing/disconnect',
-                                        'routing-id': client.routing_id }, None), client, clients)
+        assert(client.__class__ == RoutedSystemClient)
 
-    def register(self, obj, client, clients):
-        if not isinstance(client, RoutedSystemClient):
-            promote_to_routed_system_client(client, obj)
-
-        if obj is not None:
-            return self.register_with_message(obj, client, clients)
+        if client.server:
+            logger.info(u"Server {0} disconnected!".format(client))
         else:
-            return self.register_without_message(client, clients)
+            logger.info(u"Client {0} disconnected!".format(client))
 
-    def register_with_message(self, obj, client, clients):
+        if client.subscribed:
+            self.route(BusinessObject({ 'event': 'routing/disconnect',
+                                        'routing-id': client.routing_id }, None), None, clients)
+
+    def handle(self, obj, sender, clients):
+        assert(sender.__class__ == RoutedSystemClient)
+
         if obj.event == 'routing/subscribe':
-            return self.register_client(obj, client, clients)
+            self.subscribe(obj, sender, clients)
         elif obj.event == 'services/register':
-            return self.register_service(obj, client, clients)
+            return self.register_service(obj, sender, clients)
+        else:
+            return self.route(obj, sender, clients)
 
-    def register_client(self, obj, client, clients):
+    def subscribe(self, obj, client, clients):
+        if obj is None and client.server:
+            subscription = make_server_subscription()
+            subscription.metadata['routing-id'] = self.routing_id
+            client.send(subscription, None)
+            return
+
+        client.extra_routing_ids = RoutingMiddleware.extra_routing_ids(obj)
+        client.receive_mode = obj.metadata.get('receive_mode', 'none')
+        client.types = obj.metadata.get('types', 'all')
+        client.server = RoutingMiddleware.is_server(obj)
+        client.subscribed = True
+
+        notify = BusinessObject({ 'event': 'routing/subscribe/notify',
+                                  'routing-id': client.routing_id }, None)
+        # Send a registration reply
+        if client.server:
+            notify.metadata['role'] = 'server'
+            subscription = make_server_subscription()
+            subscription.metadata['routing-id'] = self.routing_id
+            if not client.subscribed_to:
+                client.send(subscription, None)
+                client.subscribed_to = True
+            client.send(BusinessObject({ 'event': 'routing/subscribe/reply',
+                                         'routing-id': client.routing_id,
+                                         'role': 'server' }, None), None)
+            logger.info(u"Server {0} subscribed!".format(client))
+        else:
+            client.send(BusinessObject({ 'event': 'routing/subscribe/reply',
+                                         'routing-id': client.routing_id }, None), None)
+            logger.info(u"Client {0} subscribed!".format(client))
+
+        for c in clients:
+            if c != client:
+                c.send(notify, None)
+
+
+    @classmethod
+    def is_server(cls, obj):
+        if 'role' in obj.metadata and obj.metadata['role'] == 'server':
+            if 'route' not in obj.metadata:
+                return True
+            elif len(obj.metadata['route']) == 1:
+                return True
+        return False
+
+    @classmethod
+    def extra_routing_ids(cls, obj):
+        extra_routing_ids = []
         if 'routing-ids' in obj.metadata:
             routing_ids = obj.metadata['routing-ids']
             if isinstance(routing_ids, basestring):
                 logger.error(u"Got {0} as routing-ids from {1}".format(routing_ids, client))
             else:
                 for routing_id in routing_ids:
-                    client.extra_routing_ids.append(routing_id)
-
-        client.receive = obj.metadata.get('receive_mode', 'all')
-        client.subscriptions = obj.metadata.get('types', 'all')
-
-        if 'role' in obj.metadata and obj.metadata['role'] == 'server':
-            if 'route' in obj.metadata and len(route) == 1 or \
-                   'route' not in obj.metadata:
-                client.server = True
-            return obj
-
-        # Send a registration reply
-        if client.server:
-            client.send(make_server_registration(obj), None)
-            logger.info(u"Server {0} registered".format(client))
-            return obj
-        else:
-            client.send(make_registration_reply(client, obj, client.routing_id), None)
-            logger.info(u"Client {0} registered".format(client))
-            return BusinessObject({ 'event': 'routing/subscribe/reply',
-                                    'routing-id': routing_id }, payload)
+                    extra_routing_ids.append(routing_id)
+        return extra_routing_ids
 
     def register_service(self, obj, client, clients):
-        if 'name' not in obj.metadata:
-            logger.warning(u"services/register without 'name' from {0}".format(client))
-        client.service = obj.metadata['name']
+        if client.subscribed is False:
+            client.send(BusinessObject({ 'event': 'services/register/reply',
+                                         'error': 'routing subscription required' }, None), None)
+            logger.warning(u"Client {0} tried to register as a service without a routing subscription!".format(client))
+            return
 
         if 'route' in obj.metadata:
             routing_id = obj.metadata['route'][0]
+            if len(route) > 1:
+                return
         else:
             routing_id = client.routing_id
 
+        if 'name' not in obj.metadata:
+            logger.warning(u"services/register without 'name' from {0}".format(client))
+            client.send(BusinessObject({ 'event': 'services/register/reply',
+                                         'error': 'no name specified',
+                                         'in-reply-to': obj.id,
+                                         'to': routing_id }, None), None)
+
+        client.service = obj.metadata['name']
+        client.send(BusinessObject({ 'event': 'services/register/reply',
+                                     'in-reply-to': obj.id,
+                                     'to': routing_id }, None), None)
+
         logger.info(u"Service {0} registered".format(client))
+        return self.route(BusinessObject({ 'event': 'services/register/notify',
+                                           'name': client.service }, None), None, clients)
 
-    def register_without_message(self, client, clients):
-        if client.server:
-            logger.info(u"Server {0} registered".format(client))
-        else:
-            logger.info(u"Client {0} registered".format(client))
-
-        return BusinessObject({ 'event': 'routing/connect',
-                                'routing-id': client.routing_id }, None)
 
     def route(self, obj, sender, clients):
+        if sender is not None and not sender.subscribed:
+            logger.warning("Dropped {0}, {1} not subscribed!".format(obj, sender))
+            return
+
         if 'route' in obj.metadata:
             route = obj.metadata['route']
         else:
@@ -270,7 +309,7 @@ class RoutingMiddleware(Middleware):
         if self.routing_id in route:
             return False
 
-        if len(route) == 0:
+        if len(route) == 0 and sender is not None:
             route.append(sender.routing_id)
         route.append(self.routing_id)
 
@@ -314,10 +353,19 @@ class RoutingMiddleware(Middleware):
         return True, 'found target'
 
     def should_route_to(self, obj, sender, recipient):
+        if not recipient.subscribed:
+            return False, 'recipient not yet subscribed'
+
         if 'route' in obj.metadata:
             if isinstance(recipient, RoutedSystemClient) and \
                    recipient.routing_id in obj.metadata['route']:
                 return False, 'recipient.routing_id in route'
+
+            if isinstance(sender, RoutedSystemClient) and \
+                   obj.event is not None and obj.event.startswith('routing/'):
+                if sender.routing_id in obj.metadata['route']:
+                    return False, 'routing/* and sender.routing_id in route'
+                
 
         if recipient.server:
             return True, 'recipient is server'
@@ -326,43 +374,43 @@ class RoutingMiddleware(Middleware):
             if not recipient.has_routing_id(obj.metadata['to']):
                 return False, "recipient doesn't have routing id for to field"
 
-        receive = recipient.receive
-        subscriptions = recipient.subscriptions
+        receive_mode = recipient.receive_mode
+        types = recipient.types
 
         reason = []
         should = None
 
-        if receive == "none":
+        if receive_mode == "none":
             should = False
-            reason.append('receive is none')
+            reason.append('receive_mode is none')
 
-        elif receive == "no_echo":
+        elif receive_mode == "no_echo":
             if sender is recipient:
                 should = False
-                reason.append('receive is no_echo and sender is recipient')
+                reason.append('receive_mode is no_echo and sender is recipient')
             else:
                 should = True
-                reason.append("receive is no_echo and sender isn't recipient")
+                reason.append("receive_mode is no_echo and sender isn't recipient")
 
-        elif receive == "events_only":
+        elif receive_mode == "events_only":
             if obj.event is not None:
                 should = True
-                reason.append("receive is events_only and this is an event")
+                reason.append("receive_mode is events_only and this is an event")
             else:
                 should = False
-                reason.append("receive is events_only and this is not an event")
+                reason.append("receive_mode is events_only and this is not an event")
 
-        elif receive == "all":
-            reason.append("receive is all")
+        elif receive_mode == "all":
+            reason.append("receive_mode is all")
             should = True
 
         if should:
-            if 'subscriptions' == "none":
+            if types == "none":
                 should = False
-                reason.append("subscriptions is none")
-            elif 'subscriptions' == "all":
+                reason.append("types is none")
+            elif types == "all":
                 should = True
-                reason.append("subscriptions is all")
+                reason.append("types is all")
 
         return should, '; '.join(reason)
 
@@ -380,16 +428,13 @@ class MOTDMiddleware(Middleware):
 
 class LegacySubscriptionMiddleware(Middleware):
     def handle(self, obj, sender, clients):
-        if obj.event != 'clients/register':
-            return obj
-
-        self.handle_legacy_registration(obj, sender, clients)
+        if obj.event == 'clients/register':
+            return self.handle_legacy_registration(obj, sender, clients)
+        return obj
 
     def handle_legacy_registration(self, obj, sender, clients):
         client = sender
-
-        if not isinstance(client, RoutedSystemClient):
-            promote_to_routed_system_client(client, obj)
+        RoutedSystemClient.promote(client, obj=obj)
 
         if 'route' in obj.metadata and len(obj.metadata['route']) > 1:
             return obj
@@ -402,17 +447,26 @@ class LegacySubscriptionMiddleware(Middleware):
                 for routing_id in routing_ids:
                     client.extra_routing_ids.append(routing_id)
 
-        client.receive = obj.metadata.get('receive', 'all')
-        client.subscriptions = obj.metadata.get('subscriptions', 'all')
+        client.receive_mode = obj.metadata.get('receive', 'all')
+        client.types = obj.metadata.get('subscriptions', 'all')
+        client.subscribed = True
+        client.legacy = True
 
-        logger.info(u"Legacy client {0} registered".format(client))
+        logger.info(u"Legacy client {0} subscribed!".format(client))
 
-        if client.receive != "none" and client.subscriptions != "none":
+        if client.receive_mode != "none" and client.types != "none":
             client.send(BusinessObject({ 'event': 'clients/register/reply',
                                          'routing-id': sender.routing_id }, None), None)
+
+        notify = BusinessObject({ 'event': 'routing/subscribe/notify',
+                                  'routing-id': client.routing_id }, None)
+        for c in clients:
+            if c != client:
+                c.send(notify, None)
 
         return BusinessObject({ 'event': 'services/request',
                                 'name': 'clients',
                                 'request': 'join',
                                 'client': obj.metadata.get('name', 'no-client'),
-                                'user': obj.metadata.get('user', 'no-user') }, None)
+                                'user': obj.metadata.get('user', 'no-user'),
+                                'route': obj.metadata.get('route', []) }, None)

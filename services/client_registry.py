@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import json
+
 from system import BusinessObject
 from service import Service
 
@@ -7,8 +9,16 @@ class Client(object):
     def __init__(self, obj):
         self.client = obj.metadata.get('client', 'no-client')
         self.user = obj.metadata.get('user', 'no-user')
+
+        self.server = False
+        role = obj.metadata.get('role', False)
+        if role == 'server':
+            self.server = True
+
         self.routing_id = None
-        if 'route' in obj.metadata:
+        if 'routing-id' in obj.metadata:
+            self.routing_id = obj.metadata['routing-id']
+        elif 'route' in obj.metadata:
             self.routing_id = obj.metadata['route'][0]
 
     def __unicode__(self):
@@ -38,18 +48,34 @@ class ClientRegistry(Service):
     def handle_list(self, obj):
         requesting_client = self.client_for_sender(obj)
 
+        if requesting_client is not None:
+            routing_id = requesting_client.routing_id
+        else:
+
+            if 'route' in obj.metadata:
+                routing_id = obj.metadata['route'][0]
+            else:
+                self.logger.warning(u"list request {0} with no and no route!".format(obj.metadata))
+                return
+
         clients = []
         for client in self.clients:
             clients.append({ 'user': client.user,
                              'client': client.client,
-                             'routing-id': client.routing_id })
+                             'routing-id': client.routing_id,
+                             'server': client.server })
 
         metadata = { 'event': 'services/reply',
-                     'clients': clients,
                      'in-reply-to': obj.id,
-                     'to': requesting_client.routing_id }
+                     'clients': clients,
+                     'to': routing_id }
 
-        return BusinessObject(metadata, None)
+        reply = { 'clients': clients }
+        payload = bytearray(json.dumps(reply, ensure_ascii=False),
+                            encoding='utf-8')
+        metadata['size'] = len(payload)
+
+        return BusinessObject(metadata, payload)
 
     def remove_client(self, obj):
         if 'routing-id' not in obj.metadata:
@@ -67,9 +93,16 @@ class ClientRegistry(Service):
         self.logger.info(u"{0} removed from registry!".format(removable))
 
     def add_client(self, obj):
-        client = Client(obj)
-        self.clients.append(client)
-        self.logger.info(u"{0} registered!".format(repr(client)))
+        new_client = Client(obj)
+        removable = None
+        for client in self.clients:
+            if client.routing_id == new_client.routing_id:
+                removable = client
+        if removable:
+            self.clients.remove(removable)
+
+        self.clients.append(new_client)
+        self.logger.info(u"{0} registered!".format(repr(new_client)))
 
     def handle_connect(self, obj):
         self.add_client(obj)
@@ -81,9 +114,7 @@ class ClientRegistry(Service):
         self.remove_client(obj)
 
     def handle(self, obj):
-        if obj.event == 'routing/connect':
-            return self.handle_connect(obj)
-        elif obj.event == 'routing/subscribe':
+        if obj.event == 'routing/subscribe/notify':
             return self.handle_subscribe(obj)
         elif obj.event == 'routing/disconnect':
             return self.handle_disconnect(obj)
@@ -101,8 +132,7 @@ class ClientRegistry(Service):
             return self.handle_list(obj)
 
     def should_handle(self, obj):
-        if obj.event == 'routing/connect' or \
-           obj.event == 'routing/subscribe' or \
+        if obj.event == 'routing/subscribe/notify' or \
            obj.event == 'routing/disconnect':
             return True
         elif obj.event == 'services/request' and \

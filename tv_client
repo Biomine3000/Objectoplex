@@ -14,7 +14,8 @@ from os import environ as env
 from argparse import ArgumentParser
 
 from system import BusinessObject, InvalidObject
-from tv import registration_object, list_clients_object, print_readably
+from tv import subscription_object, registration_object, list_clients_object
+from tv import print_readably
 
 u8 = codecs.getwriter('utf-8')(sys.stdout)
 logger = logging.getLogger('raw_client')
@@ -64,6 +65,7 @@ def main():
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect((opts.host, opts.port))
 
+    subscription_object().serialize(socket=sock)
     registration_object(sys.argv[0], env['USER']).serialize(socket=sock)
     try:
         while True:

@@ -37,7 +37,7 @@ class SystemClient(Greenlet):
         self.queue = Queue()
 
     def _run(self):
-        logger.info(u"Handling client from {0}".format(self.address))
+        logger.info(u"Handling connection from {0}".format(self.address))
 
         last_activity = datetime.now()
         while True:
@@ -58,7 +58,7 @@ class SystemClient(Greenlet):
                     last_activity = datetime.now()
                 except socket.error, e:
                     if e[0] == errno.ECONNRESET or e[0] == errno.EPIPE:
-                        logger.warning()
+                        # logger.warning()
                         self.close(u"{0}".format(e))
                         return
                     raise e
@@ -119,10 +119,18 @@ class ObjectoPlex(StreamServer):
         for linked_server in linked_servers:
             self.open_link(linked_server)
 
+        self.previous_sent = None
+
     def open_link(self, server):
         while True:
             try:
-                self._open_link_helper(server)
+                client = self._open_link_helper(server)
+                for middleware in self.middlewares:
+                    try:
+                        middleware.connect(client, set(self.clients))
+                    except Exception, e:
+                        traceback.print_exc()
+                        logger.error(u"Got {0} while calling {1}.connect!".format(e, middleware))
                 break
             except socket.error, e:
                 logger.warning(u"Unable to connect to linked server {0}: {1}".format(server, e))
@@ -144,6 +152,7 @@ class ObjectoPlex(StreamServer):
         client.port = listener[1]
         client.start()
         logger.info(u"Connected to server at {0}:{1}".format(*listener))
+        return client
 
     def handle(self, source, address):
         client = SystemClient(source, address, self)
@@ -155,14 +164,16 @@ class ObjectoPlex(StreamServer):
                 middleware.connect(client, set(self.clients))
             except Exception, e:
                 traceback.print_exc()
-                logger.error(u"Got {0} while calling {1}.handle!".format(e, middleware))
+                logger.error(u"Got {0} while calling {1}.connect!".format(e, middleware))
 
         self.clients.add(client)
 
         client.start()
 
     def send(self, message, sender):
-        logger.info(u"{0}: {1}".format(sender, message))
+        if self.previous_sent != message:
+            logger.info(u"{0}: {1}".format(sender, message))
+        self.previous_sent = message
 
         for middleware in self.middlewares:
             try:
@@ -183,5 +194,5 @@ class ObjectoPlex(StreamServer):
                 traceback.print_exc()
                 logger.error(u"Got {0} while calling {1}.disconnect!".format(e, middleware))
 
-        if client.server:
+        if client.server and hasattr(client, 'host'):
             self.open_link((client.host, client.port))

@@ -61,6 +61,14 @@ class Service(object):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.connect((self.host, self.port))
 
+    def subscribe(self):
+        BusinessObject({ 'event': "routing/subscribe",
+                         'receive_mode': 'all',
+                         'types': 'all' },
+                       None).serialize(socket=self.socket)
+        self.logger.info("Registered to server as service %s" %
+                         self.__class__.__service__)
+
     def register(self):
         BusinessObject({'event': "services/register",
                         'name': self.__class__.__service__},
@@ -72,6 +80,7 @@ class Service(object):
         while True:
             try:
                 self._open()
+                self.subscribe()
                 self.register()
                 self.receive()
             except socket.error, e:
