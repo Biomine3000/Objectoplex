@@ -15,18 +15,19 @@ system_parsed_keys = frozenset(['type', 'event'])
 
 def registration_object(client_name, user_name):
     metadata = {
-        'event': 'clients/register',
-        'receive': 'all',
-        'subscriptions': 'all',
-        'name': client_name,
+        'event': 'services/request',
+        'name': 'clients',
+        'request': 'join',
+        'client': client_name,
         'user': user_name
         }
     return BusinessObject(metadata, None)
 
 def list_clients_object():
     metadata = {
-        'event': 'clients/list',
-        'avoid': 'hasselhoffian-recursion'
+        'event': 'services/request',
+        'name': 'clients',
+        'request': 'list',
         }
     return BusinessObject(metadata, None)
 
