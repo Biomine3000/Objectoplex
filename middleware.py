@@ -140,33 +140,6 @@ class RoutedSystemClient(SystemClient):
         super(RoutedSystemClient, self).send(message, sender)
 
 
-def make_registration_reply(client, obj, routing_id):
-    payload = None
-    metadata = {
-        'event': 'clients/register/reply',
-        'routing-id': routing_id
-        }
-
-    if obj is not None:
-        if 'name' in obj.metadata and 'user' in obj.metadata:
-            payload = bytearray(u'Welcome, {0}-{1}'.format(obj.metadata['name'],
-                                                           obj.metadata['user']), encoding='utf-8')
-            metadata['size'] = len(payload)
-            metadata['type'] = 'text/plain; charset=UTF-8'
-
-    return BusinessObject(metadata, payload)
-
-def make_server_registration():
-    metadata = {'event': 'clients/register',
-                'role': 'server',
-                'routing-id': make_routing_id(),
-                'receive': 'all',
-                'subscriptions': 'all',
-                'name': 'Objectoplex',
-                'user': env['USER']
-                }
-    return BusinessObject(metadata, None)
-
 def promote_to_routed_system_client(client, obj):
     client.__class__ = RoutedSystemClient
 
@@ -176,34 +149,18 @@ def promote_to_routed_system_client(client, obj):
     client.subscriptions = "all"
     client.service = None
 
-def make_registration_notification(client, obj, routing_id):
-    payload = None
-    metadata = {
-        'event': 'clients/register/notify',
-        'routing-id': routing_id
-        }
+def make_server_subscription(obj):
+    metadata = {'event': 'routing/subscribe',
+                'role': 'server',
+                'routing-id': make_routing_id(obj),
+                'receive': 'all',
+                'subscriptions': 'all',
+                'name': 'Objectoplex',
+                'user': env['USER']
+                }
+    return BusinessObject(metadata, None)
 
-    if 'name' in obj.metadata:
-        metadata['name'] = obj.metadata['name']
-    if 'user' in obj.metadata:
-        metadata['user'] = obj.metadata['user']
 
-    if 'name' in obj.metadata and 'user' in obj.metadata:
-        payload = bytearray(u'{0}-{1} joined!'.format(obj.metadata['name'],
-                                                      obj.metadata['user']), encoding='utf-8')
-        metadata['size'] = len(payload)
-        metadata['type'] = 'text/plain; charset=UTF-8'
-
-    return BusinessObject(metadata, payload)
-
-def make_service_registration_notification(client, routing_id):
-    return BusinessObject({ 'event': 'services/register/notify',
-                            'routing-id': routing_id,
-                            'name': client.service }, None)
-
-def make_part_notification(client, routing_id):
-    return BusinessObject({ 'event': 'clients/part/notify',
-                            'routing-id': routing_id }, None)
 
 def make_routing_id(registration_object=None):
     if registration_object:
@@ -220,7 +177,7 @@ class RoutingMiddleware(Middleware):
         self.routing_id = make_routing_id() # routing id of the server
 
     def handle(self, obj, sender, clients):
-        if obj.event == 'clients/register':
+        if obj.event == 'routing/subscribe':
             self.register(obj, sender, clients)
         elif obj.event == 'services/register':
             self.register(obj, sender, clients)
@@ -235,7 +192,8 @@ class RoutingMiddleware(Middleware):
 
     def disconnect(self, client, clients):
         if isinstance(client, RoutedSystemClient):
-            self.route(make_part_notification(client, client.routing_id), client, clients)
+            self.route(BusinessObject({ 'event': 'routing/disconnect',
+                                        'routing-id': client.routing_id }, None), client, clients)
 
     def register(self, obj, client, clients):
         if not isinstance(client, RoutedSystemClient):
@@ -247,7 +205,7 @@ class RoutingMiddleware(Middleware):
             return self.register_without_message(client, clients)
 
     def register_with_message(self, obj, client, clients):
-        if obj.event == 'clients/register':
+        if obj.event == 'routing/subscribe':
             return self.register_client(obj, client, clients)
         elif obj.event == 'services/register':
             return self.register_service(obj, client, clients)
@@ -261,8 +219,8 @@ class RoutingMiddleware(Middleware):
                 for routing_id in routing_ids:
                     client.extra_routing_ids.append(routing_id)
 
-        client.receive = obj.metadata.get('receive', 'all')
-        client.subscriptions = obj.metadata.get('subscriptions', 'all')
+        client.receive = obj.metadata.get('receive_mode', 'all')
+        client.subscriptions = obj.metadata.get('types', 'all')
 
         if 'role' in obj.metadata and obj.metadata['role'] == 'server':
             if 'route' in obj.metadata and len(route) == 1 or \
@@ -272,13 +230,14 @@ class RoutingMiddleware(Middleware):
 
         # Send a registration reply
         if client.server:
-            client.send(make_server_registration(), None)
+            client.send(make_server_registration(obj), None)
             logger.info(u"Server {0} registered".format(client))
             return obj
         else:
             client.send(make_registration_reply(client, obj, client.routing_id), None)
             logger.info(u"Client {0} registered".format(client))
-            return make_registration_notification(client, obj, client.routing_id)
+            return BusinessObject({ 'event': 'routing/subscribe/reply',
+                                    'routing-id': routing_id }, payload)
 
     def register_service(self, obj, client, clients):
         if 'name' not in obj.metadata:
@@ -291,7 +250,6 @@ class RoutingMiddleware(Middleware):
             routing_id = client.routing_id
 
         logger.info(u"Service {0} registered".format(client))
-        return make_service_registration_notification(client, routing_id)
 
     def register_without_message(self, client, clients):
         if client.server:
@@ -299,7 +257,8 @@ class RoutingMiddleware(Middleware):
         else:
             logger.info(u"Client {0} registered".format(client))
 
-        return make_registration_reply(client, None, client.routing_id)
+        return BusinessObject({ 'event': 'routing/connect',
+                                'routing-id': client.routing_id }, None)
 
     def route(self, obj, sender, clients):
         if 'route' in obj.metadata:
@@ -316,7 +275,7 @@ class RoutingMiddleware(Middleware):
         route.append(self.routing_id)
 
         if obj.event == 'services/request':
-            status, reason = self.route_service_request(obj, sender, clients)[0]
+            status, reason = self.route_service_request(obj, sender, clients)
             # print('---')
             # print(obj.metadata)
             # print(status)

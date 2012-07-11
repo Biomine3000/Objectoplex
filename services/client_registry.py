@@ -5,14 +5,14 @@ from service import Service
 
 class Client(object):
     def __init__(self, obj):
-        self.name = obj.metadata.get('name', 'no-name')
+        self.client = obj.metadata.get('client', 'no-client')
         self.user = obj.metadata.get('user', 'no-user')
         self.routing_id = None
         if 'route' in obj.metadata:
             self.routing_id = obj.metadata['route'][0]
 
     def __unicode__(self):
-        return u'{0}-{1}'.format(self.name, self.user)
+        return u'{0}-{1}'.format(self.client, self.user)
 
     def __str__(self):
         return unicode(self).encode('ASCII', 'backslashreplace')
@@ -21,18 +21,11 @@ class Client(object):
         return '<%s %s (routing-id: %s)>' % (self.__class__.__name__, str(self), self.routing_id)
 
 class ClientRegistry(Service):
-    __service__ = 'client_registry'
+    __service__ = 'clients'
 
     def __init__(self, *args, **kwargs):
         super(ClientRegistry, self).__init__(*args, **kwargs)
         self.clients = []
-
-    def should_handle(self, obj):
-        if obj.event is not None and \
-               obj.event.startswith('clients/'):
-            return True
-
-        return False
 
     def client_for_sender(self, obj):
         if 'route' in obj.metadata:
@@ -45,50 +38,79 @@ class ClientRegistry(Service):
     def handle_list(self, obj):
         requesting_client = self.client_for_sender(obj)
 
-        if requesting_client is None:
-            self.logger.warning(u"Couldn't find client object for {0}".format(obj.metadata))
-            return None
-
-        others = []
+        clients = []
         for client in self.clients:
-            if requesting_client is not None and client != requesting_client:
-                others.append(unicode(client))
-            elif requesting_client is None:
-                others.append(unicode(client))
+            clients.append({ 'user': client.user,
+                             'client': client.client,
+                             'routing-id': client.routing_id })
 
-        metadata = { 'event': 'clients/list/reply',
-                     'others': others,
+        metadata = { 'event': 'services/reply',
+                     'clients': clients,
                      'in-reply-to': obj.id,
-                     'to': requesting_client.routing_id,
-                     'you': unicode(requesting_client) }
+                     'to': requesting_client.routing_id }
 
         return BusinessObject(metadata, None)
 
+    def remove_client(self, obj):
+        if 'routing-id' not in obj.metadata:
+            self.logger.warning(u"Received leave with no routing-id: {0}".format(obj.metadata))
+            return
+
+        removable = None
+        for client in self.clients:
+            if client.routing_id == obj.metadata['routing-id']:
+                removable = client
+
+        if removable is not None:
+            self.clients.remove(removable)
+
+        self.logger.info(u"{0} removed from registry!".format(removable))
+
+    def add_client(self, obj):
+        client = Client(obj)
+        self.clients.append(client)
+        self.logger.info(u"{0} registered!".format(repr(client)))
+
+    def handle_connect(self, obj):
+        self.add_client(obj)
+
+    def handle_subscribe(self, obj):
+        self.add_client(obj)
+
+    def handle_disconnect(self, obj):
+        self.remove_client(obj)
+
     def handle(self, obj):
-        _clients, event = obj.event.split('/', 1)
+        if obj.event == 'routing/connect':
+            return self.handle_connect(obj)
+        elif obj.event == 'routing/subscribe':
+            return self.handle_subscribe(obj)
+        elif obj.event == 'routing/disconnect':
+            return self.handle_disconnect(obj)
 
-        if event == 'register':
-            client = Client(obj)
-            self.clients.append(client)
-            self.logger.info(u"{0} registered!".format(repr(client)))
+        if 'request' not in obj.metadata:
+            return
+
+        request = obj.metadata['request']
+
+        if request == 'join':
+            self.add_client(obj)
+        elif request == 'leave':
+            self.remove_client(obj)
+        elif request == 'list':
             return self.handle_list(obj)
-        elif event == 'list':
-            return self.handle_list(obj)
-        elif event == 'part/notify':
-            if 'routing-id' not in obj.metadata:
-                self.logger.warning(u"Received clients/part/notify with no routing-id: {0}".format(obj.metadata))
-                return
 
-            removable = None
-            for client in self.clients:
-                if client.routing_id == obj.metadata['routing-id']:
-                    removable = client
+    def should_handle(self, obj):
+        if obj.event == 'routing/connect' or \
+           obj.event == 'routing/subscribe' or \
+           obj.event == 'routing/disconnect':
+            return True
+        elif obj.event == 'services/request' and \
+                 obj.metadata.get('name', None) == self.__class__.__service__:
+            return True
 
-            if removable is not None:
-                self.clients.remove(removable)
-
-            self.logger.info(u"{0} removed from registry!".format(removable))
-            return self.handle_list(obj)
+        return False
+                      
 
 service = ClientRegistry
 
