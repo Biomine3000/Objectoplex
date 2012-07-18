@@ -66,14 +66,13 @@ class Service(object):
                          'receive_mode': 'all',
                          'types': 'all' },
                        None).serialize(socket=self.socket)
-        self.logger.info("Registered to server as service %s" %
-                         self.__class__.__service__)
+        self.logger.info("Subscribed to server")
 
     def register(self):
         BusinessObject({'event': "services/register",
                         'name': self.__class__.__service__},
                        None).serialize(socket=self.socket)
-        self.logger.info("Registered to server as service %s" %
+        self.logger.info("Registered to server as service '%s'" %
                          self.__class__.__service__)
 
     def connect(self):
