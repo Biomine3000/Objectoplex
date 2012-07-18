@@ -34,9 +34,13 @@ def main():
     logger = logging.getLogger(opts.module)
 
     if '/' in opts.module:
-        sys.path.append('/'.join(opts.module.split('/', )[:-1]))
+        module_path = '/'.join(opts.module.split('/', )[:-1])
+        module_name = opts.module.split('/', )[-1]
+        sys.path.append(module_path)
+        file, pathname, description = imp.find_module(module_name)
+    else:
+        file, pathname, description = imp.find_module(opts.module)
 
-    file, pathname, description = imp.find_module(opts.module)
     module = imp.load_module(opts.module, file, pathname, description)
 
     try:
