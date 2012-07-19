@@ -24,7 +24,7 @@ def collect_items(path):
     ret = []
 
     for item in listdir(path):
-        item_path = join(opts.directory, item)
+        item_path = join(path, item)
         
         if isdir(item_path):
             for i in collect_items(item_path):
