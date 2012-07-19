@@ -26,7 +26,7 @@ def registration_object(client_name, user_name):
 def subscription_object():
     metadata = {
         'event': 'routing/subscribe',
-        'receive_mode': 'all',
+        'receive-mode': 'all',
         'types': 'all',
         }
     return BusinessObject(metadata, None)

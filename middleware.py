@@ -214,7 +214,7 @@ class RoutingMiddleware(Middleware):
             return
 
         client.extra_routing_ids = RoutingMiddleware.extra_routing_ids(obj)
-        client.receive_mode = obj.metadata.get('receive_mode', 'none')
+        client.receive_mode = obj.metadata.get('receive-mode', obj.metadata.get('receive_mode', 'none'))
         client.types = obj.metadata.get('types', 'all')
         client.server = RoutingMiddleware.is_server(obj)
         client.subscribed = True
@@ -231,11 +231,13 @@ class RoutingMiddleware(Middleware):
                 client.subscribed_to = True
             client.send(BusinessObject({ 'event': 'routing/subscribe/reply',
                                          'routing-id': client.routing_id,
+                                         'in-reply-to': obj.id,
                                          'role': 'server' }, None), None)
             logger.info(u"Server {0} subscribed!".format(client))
         else:
             client.send(BusinessObject({ 'event': 'routing/subscribe/reply',
-                                         'routing-id': client.routing_id }, None), None)
+                                         'routing-id': client.routing_id,
+                                         'in-reply-to': obj.id }, None), None)
             logger.info(u"Client {0} subscribed!".format(client))
 
         for c in clients:

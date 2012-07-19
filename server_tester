@@ -1,5 +1,159 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+import logging
+from unittest import TestCase
+from unittest import main as unittest_main
+from optparse import OptionParser
+from datetime import datetime, timedelta
 
-from system import BusinessObject
+import socket
+import select
+import json
+from uuid import uuid4
 
+from system import BusinessObject, InvalidObject
+
+logger = logging.getLogger("server_tester")
+
+
+def reply_for_object(obj, sock, timeout_secs=1.0):
+    """
+    Waits for a reply to a sent object (connected by in-reply-to field).
+
+    Returns the object and seconds elapsed as tuple (obj, secs).
+    """
+    started = datetime.now()
+    delta = timedelta(seconds=timeout_secs)
+    while True:
+        rlist, wlist, xlist = select.select([sock], [], [], 0.0001)
+
+        if datetime.now() > started + delta:
+            return None, timeout_secs
+
+        if len(rlist) == 0:
+            continue
+
+        reply = BusinessObject.read_from_socket(sock)
+
+        if reply is None:
+            raise InvalidObject
+        elif reply.metadata.get('in-reply-to', None) == obj.id:
+            return reply, (datetime.now() - started).seconds
+
+
+class ConnectionTest(TestCase):
+    def test_server_accepts_connection(self):
+        global _host, _port
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect((_host, _port))
+        sock.close()
+
+class SubscriptionTest(TestCase):
+    def setUp(self):
+        global _host, _port
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.connect((_host, _port))
+
+    def tearDown(self):
+        self.sock.close()
+
+    def make_send_subscription(self):
+        obj = BusinessObject({'event': 'routing/subscribe',
+                              'receive-mode': 'all',
+                              'types': 'all'}, None)
+        obj.serialize(self.sock)
+        return obj
+
+    def test_receive_all_subscription(self):
+        reply, time = reply_for_object(self.make_send_subscription(), self.sock)
+        self.assertIsNotNone(reply)
+        self.assertIn('routing-id', reply.metadata)
+        self.assertIn('event', reply.metadata)
+        self.assertEquals(reply.metadata['event'], 'routing/subscribe/reply')
+
+    def test_receive_all_subscription_with_100ms_timeout(self):
+        reply, time = reply_for_object(self.make_send_subscription(),
+                                       self.sock, timeout_secs=0.1)
+        self.assertIsNotNone(reply)
+
+    # def test_receive_all_subscription_with_10ms_timeout(self):
+    #     reply, time = reply_for_object(self.make_send_subscription(),
+    #                                    self.sock, timeout_secs=0.01)
+    #     self.assertIsNotNone(reply)
+
+class ClientRegistryTest(TestCase):
+    def setUp(self):
+        global _host, _port
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.connect((_host, _port))
+        obj = BusinessObject({'event': 'routing/subscribe',
+                              'receive-mode': 'all',
+                              'types': 'all'}, None)
+        obj.serialize(self.sock)
+        resp, time = reply_for_object(obj, self.sock)
+        self.routing_id = resp.metadata['routing-id']
+
+    def tearDown(self):
+        self.sock.close()
+
+    def test_answers_to_service_call(self):
+        list_obj = BusinessObject({'event': 'services/request',
+                                   'name': 'clients',
+                                   'request': 'list'}, None)
+        list_obj.serialize(self.sock)
+        reply, time = reply_for_object(list_obj, self.sock)
+        self.assertIsNotNone(reply)
+
+    def test_correct_registration(self):
+        obj = BusinessObject({'event': 'services/request',
+                              'name': 'clients',
+                              'request': 'join',
+                              'client': str(uuid4()),
+                              'user': str(uuid4())}, None)
+        obj.serialize(self.sock)
+
+        list_obj = BusinessObject({'event': 'services/request',
+                                   'name': 'clients',
+                                   'request': 'list'}, None)
+        list_obj.serialize(self.sock)
+        reply, time = reply_for_object(list_obj, self.sock)
+        self.assertIsNotNone(reply, msg=u'No reply to service request')
+
+        payload_text = reply.payload.decode('utf-8')
+        payload = json.loads(payload_text)
+
+        self.assertIn('clients', payload, msg=u"attribute 'clients' not in payload")
+        d = None
+        for dct in payload['clients']:
+            self.assertIn('routing-id', dct, msg=u"attribute 'routing-id' not in list item in clients list")
+            if dct['routing-id'] == self.routing_id:
+                d = dct
+                break
+
+        self.assertIsNotNone(d, msg=u'Client not present in returned client listing')
+        self.assertEquals(obj.metadata['client'], d['client'], msg=u"attribute 'client' not equal")
+        self.assertEquals(obj.metadata['user'], d['user'], msg=u"attribute 'user' not equal")
+
+
+def main():
+    global _host, _port
+    parser = OptionParser()
+    parser.add_option("-d", "--debug", action="store_true", dest="debug", default=False,
+                      help="logging level DEBUG")
+
+    parser.add_option("--host", dest="host", default="localhost")
+    parser.add_option("--port", dest="port", default=7890, type="int")
+
+    opts, args = parser.parse_args()
+
+    if opts.debug:
+        logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
+
+    _host = opts.host
+    _port = opts.port
+
+    unittest_main()
+
+if __name__ == '__main__':
+    main()
