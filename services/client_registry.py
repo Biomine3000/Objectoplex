@@ -104,8 +104,11 @@ class ClientRegistry(Service):
         self.clients.append(new_client)
         self.logger.info(u"{0} registered!".format(repr(new_client)))
 
-    def handle_connect(self, obj):
-        self.add_client(obj)
+        metadata = { 'event': 'services/reply',
+                     'in-reply-to': obj.id,
+                     'to': new_client.routing_id,
+                     'message': 'Succesfully registered!' }
+        return BusinessObject(metadata, None)
 
     def handle_subscribe(self, obj):
         self.add_client(obj)
@@ -125,7 +128,7 @@ class ClientRegistry(Service):
         request = obj.metadata['request']
 
         if request == 'join':
-            self.add_client(obj)
+            return self.add_client(obj)
         elif request == 'leave':
             self.remove_client(obj)
         elif request == 'list':
