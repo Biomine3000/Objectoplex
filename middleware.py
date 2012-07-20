@@ -146,7 +146,6 @@ class RoutedSystemClient(SystemClient):
         instance.extra_routing_ids = []
         instance.receive_mode = "none"
         instance.types = "all"
-        instance.service = None
         instance.subscribed = False
         instance.subscribed_to = False
 
@@ -201,8 +200,6 @@ class RoutingMiddleware(Middleware):
 
         if obj.event == 'routing/subscribe':
             self.subscribe(obj, sender, clients)
-        elif obj.event == 'services/register':
-            return self.register_service(obj, sender, clients)
         else:
             return self.route(obj, sender, clients)
 
@@ -266,37 +263,6 @@ class RoutingMiddleware(Middleware):
                     extra_routing_ids.append(routing_id)
         return extra_routing_ids
 
-    def register_service(self, obj, client, clients):
-        if client.subscribed is False:
-            client.send(BusinessObject({ 'event': 'services/register/reply',
-                                         'error': 'routing subscription required' }, None), None)
-            logger.warning(u"Client {0} tried to register as a service without a routing subscription!".format(client))
-            return
-
-        if 'route' in obj.metadata:
-            routing_id = obj.metadata['route'][0]
-            if len(route) > 1:
-                return
-        else:
-            routing_id = client.routing_id
-
-        if 'name' not in obj.metadata:
-            logger.warning(u"services/register without 'name' from {0}".format(client))
-            client.send(BusinessObject({ 'event': 'services/register/reply',
-                                         'error': 'no name specified',
-                                         'in-reply-to': obj.id,
-                                         'to': routing_id }, None), None)
-
-        client.service = obj.metadata['name']
-        client.send(BusinessObject({ 'event': 'services/register/reply',
-                                     'in-reply-to': obj.id,
-                                     'to': routing_id }, None), None)
-
-        logger.info(u"Service {0} registered".format(client))
-        return self.route(BusinessObject({ 'event': 'services/register/notify',
-                                           'name': client.service }, None), None, clients)
-
-
     def route(self, obj, sender, clients):
         if sender is not None and not sender.subscribed:
             logger.warning("Dropped {0}, {1} not subscribed!".format(obj, sender))
@@ -315,44 +281,13 @@ class RoutingMiddleware(Middleware):
             route.append(sender.routing_id)
         route.append(self.routing_id)
 
-        if obj.event == 'services/request':
-            status, reason = self.route_service_request(obj, sender, clients)
-            # print('---')
-            # print(obj.metadata)
-            # print(status)
-            # print(reason)
-            # print('---')
-            if status is True:
-                return
-
         for recipient in clients:
             # print('---')
             # print(obj.metadata)
-            # print(self.should_route_to(obj, sender, recipient), recipient)
+            # print(self.should_route_to(obj, sender, recipient), recipient, recipient.routing_id)
             # print('---')
             if self.should_route_to(obj, sender, recipient)[0]:
                 recipient.send(obj, sender)
-
-    def route_service_request(self, obj, sender, clients):
-        service_name = obj.metadata.get('name', None)
-
-        if not isinstance(service_name, basestring):
-            return False, 'no proper service name specified in object'
-
-        possible_targets = [client
-                            for client in clients
-                            if client.service == service_name]
-
-        try:
-            target = choice(possible_targets)
-        except IndexError, ie:
-            target = None
-
-        if target is None:
-            return False, u'no service targets found for {0}'.format(service_name)
-
-        target.send(obj, sender)
-        return True, 'found target'
 
     def should_route_to(self, obj, sender, recipient):
         if not recipient.subscribed:
