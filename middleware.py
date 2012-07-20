@@ -68,8 +68,7 @@ class StatisticsMiddleware(Middleware):
         if obj.event is not None:
             self.events_by_type[str(obj.event)] += 1
 
-        if obj.event == 'services/request' and \
-               obj.metadata.get('name', None) == 'statistics':
+        if obj.event == 'server/statistics':
             self.send_statistics(sender, obj.id)
             return None
 
@@ -91,7 +90,7 @@ class StatisticsMiddleware(Middleware):
 
     def send_statistics(self, client, original_id):
         metadata = {
-            'event': 'services/reply',
+            'event': 'server/statistics/reply',
             'in-reply-to': original_id,
             'statistics': {
                 'received objects': self.received_objects,
