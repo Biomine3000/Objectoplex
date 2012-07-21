@@ -61,6 +61,9 @@ def main():
     parser.add_argument("-f", "--file", dest="file", default=None,
                         help="read service call payload from FILE", metavar='FILE')
 
+    parser.add_argument("-t", "--time", dest="time", action="store_true", default=False,
+                        help="time the request (the time it takes to send object and get a reply to it)")
+
     parser.add_argument("-m", "--metadata-only", action="store_true", dest="metadata_only",
                         default=False, help="only print out metadata")
     parser.add_argument("-p", "--payload-only", action="store_true", dest="payload_only",
@@ -96,6 +99,11 @@ def main():
         'types': 'all',
         }
     reg = BusinessObject(metadata, None)
+
+    if opts.time:
+        started_timing = datetime.now()
+        time_taken = None
+
     reg.serialize(socket=sock)
     logger.debug("Sent registration object: {0}".format(reg.metadata))
 
@@ -141,6 +149,10 @@ def main():
                 discovery_replies.append(resp)
             elif resp.event == 'services/reply' and \
                    resp.metadata.get('in-reply-to') == req.id:
+                if opts.time:
+                    time_taken = datetime.now() - started_timing
+                    print(u"{:+f} ms".format(time_taken.total_seconds() * 1000))
+                    break
                 if opts.payload_only:
                     raw_print(resp.payload)
                 elif opts.metadata_only:
