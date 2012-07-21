@@ -4,7 +4,6 @@ This module implements the machinery to run servers.
 """
 
 import errno
-import socket
 import logging
 import signal
 import traceback
@@ -16,6 +15,7 @@ import gevent
 
 from gevent.server import StreamServer
 from gevent import Greenlet
+from gevent import socket
 from gevent.select import select
 from gevent.queue import Queue, Empty
 
