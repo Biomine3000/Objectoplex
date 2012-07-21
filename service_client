@@ -14,6 +14,7 @@ from os import environ as env
 from sys import stdout, stderr
 from codecs import getwriter
 from datetime import datetime, timedelta
+from mimetypes import guess_type
 
 from system import BusinessObject, InvalidObject
 from tv import print_readably
@@ -56,10 +57,15 @@ def main():
     parser.add_argument("--port", dest="port", default=7890, type=int)
     parser.add_argument("-d", "--debug", action="store_true", dest="debug", default=False,
                         help="logging level DEBUG")
+
+    parser.add_argument("-f", "--file", dest="file", default=None,
+                        help="read service call payload from FILE", metavar='FILE')
+
     parser.add_argument("-m", "--metadata-only", action="store_true", dest="metadata_only",
                         default=False, help="only print out metadata")
     parser.add_argument("-p", "--payload-only", action="store_true", dest="payload_only",
                         default=False, help="only print out the payload")
+
     parser.add_argument("-r", "--readably", action="store_true", dest="readably",
                         default=False, help="return pretty-printed, readable output")
     parser.add_argument("--include-keys", dest="include_keys", default=[], type=str, nargs='+',
@@ -104,7 +110,18 @@ def main():
         if k not in metadata:
             metadata[k] = v
 
-    req = BusinessObject(metadata, None)
+    payload = None
+    if opts.file:
+        with io.FileIO(opts.file, 'r') as f:
+            payload = bytearray(f.read())
+        content_type, encoding = guess_type(opts.file)
+        if content_type is None:
+            metadata['type'] = 'application/octet-stream'
+        else:
+            metadata['type'] = content_type
+        metadata['size'] = len(payload)
+
+    req = BusinessObject(metadata, payload)
     req.serialize(sock)
 
     logger.debug(u"Sent service call: {0}".format(req.metadata))
