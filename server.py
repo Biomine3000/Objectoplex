@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-This module implements the machinery to create servers and provides a sample
-implementation of a server called ObjectoPlex.
+This module implements the machinery to run servers.
 """
 
 import errno
@@ -11,7 +10,6 @@ import signal
 import traceback
 
 from time import sleep
-from Queue import Queue
 from datetime import datetime, timedelta
 
 import gevent
@@ -19,64 +17,90 @@ import gevent
 from gevent.server import StreamServer
 from gevent import Greenlet
 from gevent.select import select
+from gevent.queue import Queue, Empty
 
 from system import BusinessObject, ObjectType
 
 logger = logging.getLogger('server')
 
 
-class SystemClient(Greenlet):
-    def __init__(self, socket, address, gateway, server=False):
+class Sender(Greenlet):
+    def __init__(self, client):
         Greenlet.__init__(self)
+        self.client = client
 
+    def _run(self):
+        client = self.client
+        logger.info(u"Sender handling connection from {0}".format(client.address))
+
+        while True:
+            try:
+                obj = client.queue.get(timeout=1.0)
+                size, sent = obj.serialize(socket=client.socket)
+                # logger.debug(u"Sent {0}/{1} of {2}".format(sent, size, obj))
+                last_activity = datetime.now()
+            except Empty, empty:
+                pass
+            except socket.error, e:
+                if e[0] == errno.ECONNRESET or e[0] == errno.EPIPE:
+                    # logger.warning()
+                    client.close(u"{0}".format(e))
+                    return
+                raise e
+
+
+class Receiver(Greenlet):
+    def __init__(self, client):
+        Greenlet.__init__(self)
+        self.client = client
+
+    def _run(self):
+        client = self.client
+        logger.info(u"Receiver handling connection from {0}".format(client.address))
+
+        last_activity = datetime.now()
+        while True:
+            if client.server and last_activity + timedelta(minutes=30) < datetime.now():
+                client.close('inactivity')
+                return
+
+            rlist, wlist, xlist = select([client.socket], [], [], timeout=1.0)
+
+            if len(rlist) == 1:
+                # logger.debug(u"Attempting to read an object from {0}".format(self.socket))
+                try:
+                    obj = BusinessObject.read_from_socket(client.socket)
+                    if obj is None:
+                        client.close("couldn't read object")
+                        return
+                    # logger.debug(u"Successfully read object {0}".format(str(obj)))
+                    client.gateway.send(obj, client)
+                    last_activity = datetime.now()
+                except socket.error, e:
+                    if e[0] == errno.ECONNRESET or e[0] == errno.EPIPE:
+                        client.close(u"{0}".format(e))
+                        return
+                    raise e
+
+
+class SystemClient(object):
+    def __init__(self, socket, address, gateway, server=False):
         self.socket = socket
         self.address = address
         self.gateway = gateway
         self.server = server
+        self.queue = Queue(maxsize=100)
 
-        self.queue = Queue()
+        self.receiver = Receiver(self)
+        self.sender = Sender(self)
 
-    def _run(self):
-        logger.info(u"Handling connection from {0}".format(self.address))
+    def start(self):
+        self.receiver.start()
+        self.sender.start()
 
-        last_activity = datetime.now()
-        while True:
-            if self.server and last_activity + timedelta(minutes=30) < datetime.now():
-                self.close('inactivity')
-                return
-
-            if not self.queue.empty():
-                rlist, wlist, xlist = select([self.socket], [self.socket], [], timeout=0.2)
-            else:
-                rlist, wlist, xlist = select([self.socket], [], [], timeout=0.2)
-
-            if not self.queue.empty() and len(wlist) == 1:
-                try:
-                    obj = self.queue.get()
-                    size, sent = obj.serialize(socket=self.socket)
-                    # logger.debug(u"Sent {0}/{1} of {2}".format(sent, size, obj))
-                    last_activity = datetime.now()
-                except socket.error, e:
-                    if e[0] == errno.ECONNRESET or e[0] == errno.EPIPE:
-                        # logger.warning()
-                        self.close(u"{0}".format(e))
-                        return
-                    raise e
-            if len(rlist) == 1:
-                # logger.debug(u"Attempting to read an object from {0}".format(self.socket))
-                try:
-                    obj = BusinessObject.read_from_socket(self.socket)
-                    if obj is None:
-                        self.close("couldn't read object")
-                        return
-                    # logger.debug(u"Successfully read object {0}".format(str(obj)))
-                    self.gateway.send(obj, self)
-                    last_activity = datetime.now()
-                except socket.error, e:
-                    if e[0] == errno.ECONNRESET or e[0] == errno.EPIPE:
-                        self.close(u"{0}".format(e))
-                        return
-                    raise e
+    def kill(self):
+        self.receiver.kill()
+        self.sender.kill()
 
     def send(self, message, sender):
         self.queue.put(message)
@@ -86,6 +110,8 @@ class SystemClient(Greenlet):
             logger.warning(u"Closing connection to {0} due to {1}".format(self.address, message))
             self.gateway.unregister(self)
             self.socket.close()
+            self.receiver.kill()
+            self.sender.kill()
         except Exception, e:
             traceback.print_exc()
             logger.error(u"Got {0} while trying to close and unregister a client!".format(e))
@@ -95,7 +121,6 @@ class SystemClient(Greenlet):
 
     def __str__(self):
         return unicode(self).encode('ASCII', 'backslashreplace')
-
 
 
 class ObjectoPlex(StreamServer):

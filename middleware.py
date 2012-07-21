@@ -129,9 +129,9 @@ class RoutedSystemClient(SystemClient):
         return False
 
     def send(self, message, sender):
-        if self.queue.qsize() > 100:
+        if self.queue.full():
             self.queue.get()
-            logger.warning(u"{0} send queue size is 100!".format(self))
+            logger.warning(u"{0} send queue is full, dropped oldest item!".format(self))
 
         super(RoutedSystemClient, self).send(message, sender)
 
