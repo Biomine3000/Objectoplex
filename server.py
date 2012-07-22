@@ -35,7 +35,7 @@ class Sender(Greenlet):
 
         while True:
             try:
-                obj = client.queue.get(timeout=1.0)
+                obj = client.queue.get(timeout=30.0)
                 size, sent = obj.serialize(socket=client.socket)
                 # logger.debug(u"Sent {0}/{1} of {2}".format(sent, size, obj))
                 last_activity = datetime.now()
@@ -64,7 +64,7 @@ class Receiver(Greenlet):
                 client.close('inactivity')
                 return
 
-            rlist, wlist, xlist = select([client.socket], [], [], timeout=1.0)
+            rlist, wlist, xlist = select([client.socket], [], [], timeout=30.0)
 
             if len(rlist) == 1:
                 # logger.debug(u"Attempting to read an object from {0}".format(self.socket))
