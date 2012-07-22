@@ -37,6 +37,7 @@ class Sender(Greenlet):
             try:
                 obj = client.queue.get(timeout=30.0)
                 size, sent = obj.serialize(socket=client.socket)
+                logger.debug(u">> {0}: {1}".format(client, obj))
                 # logger.debug(u"Sent {0}/{1} of {2}".format(sent, size, obj))
             except Empty, empty:
                 pass
@@ -73,6 +74,7 @@ class Receiver(Greenlet):
                         client.close("couldn't read object")
                         return
                     # logger.debug(u"Successfully read object {0}".format(str(obj)))
+                    logger.debug(u"<< {0}: {1}".format(client, obj))
                     client.gateway.send(obj, client)
                     last_activity = datetime.now()
                 except socket.error, e:
@@ -164,8 +166,6 @@ class ObjectoPlex(StreamServer):
         for linked_server in linked_servers:
             self.open_link(linked_server)
 
-        self.previous_sent = None
-
         self.timer = Timer(self)
         gevent.signal(signal.SIGTERM, self.timer.kill)
         gevent.signal(signal.SIGINT, self.timer.kill)
@@ -221,10 +221,6 @@ class ObjectoPlex(StreamServer):
         client.start()
 
     def send(self, message, sender):
-        if self.previous_sent != message:
-            logger.info(u"{0}: {1}".format(sender, message))
-        self.previous_sent = message
-
         for middleware in self.middlewares:
             try:
                 message = middleware.handle(message, sender, set(self.clients))

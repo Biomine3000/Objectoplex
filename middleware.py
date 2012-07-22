@@ -218,7 +218,7 @@ class RoutingMiddleware(Middleware):
             self.route(self.routing_announcement(clients), None, clients)
 
     def routing_announcement(self, clients):
-        logger.info("Sending routing announcement")
+        logger.debug("Sending routing announcement")
         metadata = { 'event': 'routing/announcement',
                      'node': self.routing_id,
                      'neighbors': [{ 'routing-id': client.routing_id }
