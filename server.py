@@ -38,7 +38,6 @@ class Sender(Greenlet):
                 obj = client.queue.get(timeout=30.0)
                 size, sent = obj.serialize(socket=client.socket)
                 # logger.debug(u"Sent {0}/{1} of {2}".format(sent, size, obj))
-                last_activity = datetime.now()
             except Empty, empty:
                 pass
             except socket.error, e:
