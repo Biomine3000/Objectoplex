@@ -4,7 +4,7 @@ from __future__ import print_function
 import hashlib
 import logging
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from collections import defaultdict
 from uuid import uuid4
 from os import environ as env
@@ -23,6 +23,14 @@ class Middleware(object):
         to be passed on to the next middleware.
         """
         return message
+
+    def periodical(self, clients):
+        """
+        This method is called periodically (interval could be seconds, could
+        be minutes).  Middleware mustn't expect to be called at certain given
+        intervals; server implementation might change.
+        """
+        pass
 
     def connect(self, client, clients):
         pass
@@ -172,6 +180,7 @@ def make_routing_id(registration_object=None):
 class RoutingMiddleware(Middleware):
     def __init__(self):
         self.routing_id = make_routing_id() # routing id of the server
+        self.last_announcement = datetime.now()
 
     def connect(self, client, clients):
         RoutedSystemClient.promote(client, None)
@@ -201,6 +210,22 @@ class RoutingMiddleware(Middleware):
             self.subscribe(obj, sender, clients)
         else:
             return self.route(obj, sender, clients)
+
+    def periodical(self, clients):
+        now = datetime.now()
+        if now > self.last_announcement + timedelta(minutes=5):
+            self.last_announcement = now
+            self.route(self.routing_announcement(clients), None, clients)
+
+    def routing_announcement(self, clients):
+        logger.info("Sending routing announcement")
+        metadata = { 'event': 'routing/announcement',
+                     'node': self.routing_id,
+                     'neighbors': [{ 'routing-id': client.routing_id }
+                                   for client in clients] }
+        obj = BusinessObject(metadata, None)
+
+        return obj
 
     def subscribe(self, obj, client, clients):
         if obj is None and client.server:
@@ -240,6 +265,7 @@ class RoutingMiddleware(Middleware):
             if c != client:
                 c.send(notify, None)
 
+        self.route(self.routing_announcement(clients), None, clients)
 
     @classmethod
     def is_server(cls, obj):
@@ -301,10 +327,12 @@ class RoutingMiddleware(Middleware):
                    obj.event is not None and obj.event.startswith('routing/'):
                 if sender.routing_id in obj.metadata['route']:
                     return False, 'routing/* and sender.routing_id in route'
-                
 
         if recipient.server:
             return True, 'recipient is server'
+
+        if obj.metadata.get('event', None) == 'routing/announcement':
+            return False, 'not routing routing announcements to non-servers'
 
         if 'to' in obj.metadata:
             if not recipient.has_routing_id(obj.metadata['to']):

@@ -8,7 +8,6 @@ import logging
 import signal
 import traceback
 
-from time import sleep
 from datetime import datetime, timedelta
 
 import gevent
@@ -16,6 +15,7 @@ import gevent
 from gevent.server import StreamServer
 from gevent import Greenlet
 from gevent import socket
+from gevent import sleep
 from gevent.select import select
 from gevent.queue import Queue, Empty
 
@@ -123,6 +123,26 @@ class SystemClient(object):
         return unicode(self).encode('ASCII', 'backslashreplace')
 
 
+class Timer(Greenlet):
+    def __init__(self, server):
+        Greenlet.__init__(self)
+        self.server = server
+
+    def _run(self):
+        logger.info(u"Timer greenlet started")
+
+        while True:
+            sleep(1)
+
+            for middleware in self.server.middlewares:
+                try:
+                    middleware.periodical(self.server.clients)
+                except KeyboardInterrupt, kbi:
+                    raise kbi
+                except Exception, e:
+                    logger.error(u"{0}".format(e))
+
+
 class ObjectoPlex(StreamServer):
     """
     ObjectoPlex is parameterized by giving a list of middleware classes.  The
@@ -145,6 +165,11 @@ class ObjectoPlex(StreamServer):
             self.open_link(linked_server)
 
         self.previous_sent = None
+
+        self.timer = Timer(self)
+        gevent.signal(signal.SIGTERM, self.timer.kill)
+        gevent.signal(signal.SIGINT, self.timer.kill)
+        self.timer.start()
 
     def open_link(self, server):
         while True:
