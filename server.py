@@ -42,11 +42,11 @@ class Sender(Greenlet):
             except Empty, empty:
                 pass
             except socket.error, e:
-                if e[0] == errno.ECONNRESET or e[0] == errno.EPIPE:
-                    # logger.warning()
-                    client.close(u"{0}".format(e))
-                    return
-                raise e
+                client.close(u"{0}".format(e))
+                return
+            except IOError, ioe:
+                client.close(u"{0}".format(e))
+                return
 
 
 class Receiver(Greenlet):
@@ -77,10 +77,11 @@ class Receiver(Greenlet):
                     client.gateway.send(obj, client)
                     last_activity = datetime.now()
                 except socket.error, e:
-                    if e[0] == errno.ECONNRESET or e[0] == errno.EPIPE:
-                        client.close(u"{0}".format(e))
-                        return
-                    raise e
+                    client.close(u"{0}".format(e))
+                    return
+                except IOError, ioe:
+                    client.close(u"{0}".format(e))
+                    return
 
 
 class SystemClient(object):
