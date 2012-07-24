@@ -186,7 +186,7 @@ class RoutingMiddleware(Middleware):
         RoutedSystemClient.promote(client, None)
 
         if client.server:
-            self.subscribe(None, client, clients)
+            self.subscribe_to_server(client)
             logger.info(u"Server {0} connected!".format(client))
         else:
             logger.info(u"Client {0} connected!".format(client))
@@ -227,13 +227,15 @@ class RoutingMiddleware(Middleware):
 
         return obj
 
-    def subscribe(self, obj, client, clients):
-        if obj is None and client.server:
-            subscription = make_server_subscription()
-            subscription.metadata['routing-id'] = self.routing_id
-            client.send(subscription, None)
+    def subscribe_to_server(self, client):
+        if client.subscribed_to:
             return
+        subscription = make_server_subscription()
+        subscription.metadata['routing-id'] = self.routing_id
+        client.send(subscription, None)
+        client.subscribed_to = True
 
+    def subscribe(self, obj, client, clients):
         client.extra_routing_ids = RoutingMiddleware.extra_routing_ids(obj)
         client.receive_mode = obj.metadata.get('receive-mode', obj.metadata.get('receive_mode', 'none'))
         client.types = obj.metadata.get('types', 'all')
