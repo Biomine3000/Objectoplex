@@ -10,6 +10,7 @@ import select
 import io
 import StringIO
 
+from datetime import datetime, timedelta
 from os import environ as env
 from argparse import ArgumentParser
 
@@ -28,15 +29,19 @@ def show(obj, include_keys=set()):
             im = Image.open(StringIO.StringIO(obj.payload))
         except Exception, e:
             print("Got %s when trying to open and show image" % str(e))
-            
+
 
 def read_show_loop(sock, include_keys=set()):
     iter = 0
+    last_list_requested = datetime.now()
     while True:
-        if iter % 60 == 0:
-            rlist, wlist, xlist = select.select([], [sock], [], 1)
-            if len(wlist) > 0:
-                list_clients_object().serialize(sock)
+        if last_list_requested + timedelta(minutes=60) < datetime.now():
+            while True:
+                rlist, wlist, xlist = select.select([], [sock], [], 1)
+                if len(wlist) > 0:
+                    list_clients_object().serialize(sock)
+                    break
+            last_list_requested = datetime.now()
 
         rlist, wlist, xlist = select.select([sock], [], [], 1)
         if len(rlist) > 0:
