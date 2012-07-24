@@ -348,7 +348,7 @@ class RoutingMiddleware(Middleware):
         if recipient.server:
             return True, 'recipient is server'
 
-        if obj.metadata.get('event', None) == 'routing/announcement':
+        if obj.metadata.get('event', '').startswith('routing/announcement/'):
             return False, 'not routing routing announcements to non-servers'
 
         if 'to' in obj.metadata:
