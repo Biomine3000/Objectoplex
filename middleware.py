@@ -206,8 +206,10 @@ class RoutingMiddleware(Middleware):
     def handle(self, obj, sender, clients):
         assert(sender.__class__ == RoutedSystemClient)
 
-        if obj.event == 'routing/subscribe':
-            self.subscribe(obj, sender, clients)
+        if obj.event == 'routing/subscribe' and RoutingMiddleware.is_server(obj):
+            self.handle_server_subscription(obj, sender, clients)
+        elif obj.event == 'routing/subscribe':
+            self.handle_client_subscription(obj, sender, clients)
         else:
             return self.route(obj, sender, clients)
 
@@ -234,40 +236,53 @@ class RoutingMiddleware(Middleware):
         subscription.metadata['routing-id'] = self.routing_id
         client.send(subscription, None)
         client.subscribed_to = True
+        logger.info(u"Subscribed to server {0}".format(client))
 
-    def subscribe(self, obj, client, clients):
+    def handle_server_subscription(self, obj, client, clients):
         client.extra_routing_ids = RoutingMiddleware.extra_routing_ids(obj)
         client.receive_mode = obj.metadata.get('receive-mode', obj.metadata.get('receive_mode', 'none'))
         client.types = obj.metadata.get('types', 'all')
-        client.server = RoutingMiddleware.is_server(obj)
         client.subscribed = True
+        client.server = True
+
+        self.subscribe_to_server(client)
+
+        client.send(BusinessObject({ 'event': 'routing/subscribe/reply',
+                                     'routing-id': client.routing_id,
+                                     'in-reply-to': obj.id,
+                                     'role': 'server' }, None), None)
 
         notify = BusinessObject({ 'event': 'routing/subscribe/notify',
-                                  'routing-id': client.routing_id }, None)
-        # Send a registration reply
-        if client.server:
-            notify.metadata['role'] = 'server'
-            subscription = make_server_subscription()
-            subscription.metadata['routing-id'] = self.routing_id
-            if not client.subscribed_to:
-                client.send(subscription, None)
-                client.subscribed_to = True
-            client.send(BusinessObject({ 'event': 'routing/subscribe/reply',
-                                         'routing-id': client.routing_id,
-                                         'in-reply-to': obj.id,
-                                         'role': 'server' }, None), None)
-            logger.info(u"Server {0} subscribed!".format(client))
-        else:
-            client.send(BusinessObject({ 'event': 'routing/subscribe/reply',
-                                         'routing-id': client.routing_id,
-                                         'in-reply-to': obj.id }, None), None)
-            logger.info(u"Client {0} subscribed!".format(client))
+                                  'routing-id': client.routing_id,
+                                  'role': 'server' }, None)
 
         for c in clients:
             if c != client:
                 c.send(notify, None)
 
         self.route(self.neighbor_announcement(clients), None, clients)
+        logger.info(u"Server {0} subscribed!".format(client))
+
+    def handle_client_subscription(self, obj, client, clients):
+        client.extra_routing_ids = RoutingMiddleware.extra_routing_ids(obj)
+        client.receive_mode = obj.metadata.get('receive-mode', obj.metadata.get('receive_mode', 'none'))
+        client.types = obj.metadata.get('types', 'all')
+        client.server = False
+        client.subscribed = True
+
+        notify = BusinessObject({ 'event': 'routing/subscribe/notify',
+                                  'routing-id': client.routing_id }, None)
+        # Send a registration reply
+        client.send(BusinessObject({ 'event': 'routing/subscribe/reply',
+                                     'routing-id': client.routing_id,
+                                     'in-reply-to': obj.id }, None), None)
+
+        for c in clients:
+            if c != client:
+                c.send(notify, None)
+
+        self.route(self.neighbor_announcement(clients), None, clients)
+        logger.info(u"Client {0} subscribed!".format(client))
 
     @classmethod
     def is_server(cls, obj):
