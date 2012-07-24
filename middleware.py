@@ -215,11 +215,11 @@ class RoutingMiddleware(Middleware):
         now = datetime.now()
         if now > self.last_announcement + timedelta(minutes=5):
             self.last_announcement = now
-            self.route(self.routing_announcement(clients), None, clients)
+            self.route(self.neighbor_announcement(clients), None, clients)
 
-    def routing_announcement(self, clients):
-        logger.debug("Sending routing announcement")
-        metadata = { 'event': 'routing/announcement',
+    def neighbor_announcement(self, clients):
+        logger.debug("Sending neighbor announcement")
+        metadata = { 'event': 'routing/announcement/neighbors',
                      'node': self.routing_id,
                      'neighbors': [{ 'routing-id': client.routing_id }
                                    for client in clients] }
@@ -265,7 +265,7 @@ class RoutingMiddleware(Middleware):
             if c != client:
                 c.send(notify, None)
 
-        self.route(self.routing_announcement(clients), None, clients)
+        self.route(self.neighbor_announcement(clients), None, clients)
 
     @classmethod
     def is_server(cls, obj):
