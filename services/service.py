@@ -84,7 +84,7 @@ class Service(object):
                 self.receive()
             except socket.error, e:
                 self.logger.warning(u"{0}:{1}; {2}".format(self.host, self.port, e))
-            sleep(10)
+            self.sleep(10)
 
     def receive(self):
         while True:
@@ -137,3 +137,6 @@ class Service(object):
 
     def cleanup(self):
         self.socket.close()
+
+    def sleep(self, seconds):
+        sleep(seconds)
