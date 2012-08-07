@@ -24,7 +24,7 @@ from server import ObjectoPlex
 from middleware import *
 from services.client_registry import ClientRegistry
 
-logger = logging.getLogger("server_tester")
+logger = logging.getLogger("tests")
 
 
 def reply_for_object(obj, sock, timeout_secs=1.0):
@@ -97,9 +97,9 @@ class TwoServerTestCase(TestCase):
 
 class ClientRegistryTestCase(SingleServerTestCase):
     def setUp(self):
-        global _host, _port
         super(ClientRegistryTestCase, self).setUp()
 
+        global _host, _port
         self.service = ClientRegistry(_host, _port)
         self.service_greenlet = Greenlet(self.service.start)
         gevent.signal(signal.SIGTERM, self.service_greenlet.kill)
@@ -112,6 +112,7 @@ class ClientRegistryTestCase(SingleServerTestCase):
         self.service.cleanup()
         self.service_greenlet.kill()
         logger.info('Stopped client registry, connecting to %s:%s', _host, _port)
+
         super(ClientRegistryTestCase, self).tearDown()
 
 
@@ -126,12 +127,14 @@ class ConnectionTest(SingleServerTestCase):
 class SubscriptionTest(SingleServerTestCase):
     def setUp(self):
         super(SubscriptionTest, self).setUp()
+
         global _host, _port
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.connect((_host, _port))
 
     def tearDown(self):
         self.sock.close()
+
         super(SubscriptionTest, self).tearDown()
 
     def make_send_subscription(self):
@@ -161,10 +164,12 @@ class SubscriptionTest(SingleServerTestCase):
                                        self.sock, timeout_secs=0.01)
         self.assertValidReceiveAllReply(reply)
 
+
 class ClientRegistryTest(ClientRegistryTestCase):
     def setUp(self):
-        global _host, _port
         super(ClientRegistryTest, self).setUp()
+
+        global _host, _port
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.connect((_host, _port))
         obj = BusinessObject({'event': 'routing/subscribe',
@@ -176,6 +181,7 @@ class ClientRegistryTest(ClientRegistryTestCase):
 
     def tearDown(self):
         self.sock.close()
+
         super(ClientRegistryTest, self).tearDown()
 
     def test_answers_to_service_call(self):
