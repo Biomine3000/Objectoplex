@@ -69,6 +69,34 @@ class BaseTestCase(TestCase):
 
         return result
 
+    def start_client_registry(self, host, port):
+        self.service = ClientRegistry(host, port)
+        self.service_greenlet = Greenlet(self.service.start)
+        gevent.signal(signal.SIGTERM, self.service_greenlet.kill)
+        gevent.signal(signal.SIGINT, self.service_greenlet.kill)
+        self.service_greenlet.start()
+        logger.info('Started client registry, connecting to %s:%s', host, port)
+
+    def stop_client_registry(self):
+        self.service.cleanup()
+        self.service_greenlet.kill()
+        logger.info('Stopped client registry, connecting to %s:%s', _host, _port)
+
+    def assertCorrectClientListReply(self, obj, payload):
+        self.assertIn('clients', payload, msg=u"attribute 'clients' not in payload")
+        d = None
+        for dct in payload['clients']:
+            self.assertIn('routing-id', dct, msg=u"attribute 'routing-id' not in list item in clients list")
+            if dct['routing-id'] == self.routing_id:
+                d = dct
+                break
+
+        self.assertIsNotNone(d, msg=u'Client not present in returned client listing')
+        self.assertEquals(obj.metadata['client'], d['client'], msg=u"attribute 'client' not equal")
+        self.assertEquals(obj.metadata['user'], d['user'], msg=u"attribute 'user' not equal")
+
+
+
 class SingleServerTestCase(BaseTestCase):
     def setUp(self):
         global _host, _port
@@ -80,40 +108,23 @@ class SingleServerTestCase(BaseTestCase):
         self.server.stop(timeout=0)
         logger.info('Stopped server at %s:%s', *(self.server.address[:2]))
 
-class TwoServerTestCase(TestCase):
+class TwoServerTestCase(BaseTestCase):
     def setUp(self):
-        global _host, _port, _port2
+        super(TwoServerTestCase, self).setUp()
 
+        global _host, _port, _port2
         self.server1 = self.start_server(_host, _port)
         logger.info('Started server at %s:%s', *(self.server1.address[:2]))
 
         self.server2 = self.start_server(_host, _port2,
-                                        linked_servers=[(_host, _port)])
+                                         linked_servers=[(_host, _port)])
         logger.info('Started server at %s:%s', *(self.server2.address[:2]))
 
     def tearDown(self):
         self.server.stop(timeout=0)
         logger.info('Stopped server at %s:%s', *(self.server.address[:2]))
 
-class ClientRegistryTestCase(SingleServerTestCase):
-    def setUp(self):
-        super(ClientRegistryTestCase, self).setUp()
-
-        global _host, _port
-        self.service = ClientRegistry(_host, _port)
-        self.service_greenlet = Greenlet(self.service.start)
-        gevent.signal(signal.SIGTERM, self.service_greenlet.kill)
-        gevent.signal(signal.SIGINT, self.service_greenlet.kill)
-        self.service_greenlet.start()
-        logger.info('Started client registry, connecting to %s:%s', _host, _port)
-
-    def tearDown(self):
-        global _host, _port
-        self.service.cleanup()
-        self.service_greenlet.kill()
-        logger.info('Stopped client registry, connecting to %s:%s', _host, _port)
-
-        super(ClientRegistryTestCase, self).tearDown()
+        super(TwoServerTestCase, self).tearDown()
 
 
 class ConnectionTest(SingleServerTestCase):
@@ -165,9 +176,12 @@ class SubscriptionTest(SingleServerTestCase):
         self.assertValidReceiveAllReply(reply)
 
 
-class ClientRegistryTest(ClientRegistryTestCase):
+class ClientRegistryTest(SingleServerTestCase):
     def setUp(self):
         super(ClientRegistryTest, self).setUp()
+
+        self.start_client_registry(_host, _port) # TODO: multiple inheritance
+        logger.info('Started client registry, connecting to %s:%s', _host, _port)
 
         global _host, _port
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -182,6 +196,9 @@ class ClientRegistryTest(ClientRegistryTestCase):
     def tearDown(self):
         self.sock.close()
 
+        self.stop_client_registry()
+        logger.info('Stopped client registry')
+
         super(ClientRegistryTest, self).tearDown()
 
     def test_answers_to_service_call(self):
@@ -189,6 +206,8 @@ class ClientRegistryTest(ClientRegistryTestCase):
                                    'name': 'clients',
                                    'request': 'list'}, None)
         list_obj.serialize(socket=self.sock)
+        logger.info(self.server)
+        logger.info(self.service)
         reply, time = reply_for_object(list_obj, self.sock)
         self.assertIsNotNone(reply)
 
@@ -210,17 +229,7 @@ class ClientRegistryTest(ClientRegistryTestCase):
         payload_text = reply.payload.decode('utf-8')
         payload = json.loads(payload_text)
 
-        self.assertIn('clients', payload, msg=u"attribute 'clients' not in payload")
-        d = None
-        for dct in payload['clients']:
-            self.assertIn('routing-id', dct, msg=u"attribute 'routing-id' not in list item in clients list")
-            if dct['routing-id'] == self.routing_id:
-                d = dct
-                break
-
-        self.assertIsNotNone(d, msg=u'Client not present in returned client listing')
-        self.assertEquals(obj.metadata['client'], d['client'], msg=u"attribute 'client' not equal")
-        self.assertEquals(obj.metadata['user'], d['user'], msg=u"attribute 'user' not equal")
+        self.assertCorrectClientListReply(obj, payload)
 
 
 def main():
