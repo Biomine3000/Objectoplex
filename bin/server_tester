@@ -52,23 +52,44 @@ def reply_for_object(obj, sock, timeout_secs=1.0):
             return reply, (datetime.now() - started).seconds
 
 
-class SingleServerTestCase(TestCase):
+class BaseTestCase(TestCase):
+    def start_server(self, host, port, linked_servers=[]):
+        result = ObjectoPlex((host, port),
+                             middlewares=[
+                                 LegacySubscriptionMiddleware(),
+                                 StatisticsMiddleware(),
+                                 ChecksumMiddleware(),
+                                 RoutingMiddleware(),
+                                 ],
+                             linked_servers=linked_servers)
+        gevent.signal(signal.SIGTERM, result.stop)
+        gevent.signal(signal.SIGINT, result.stop)
+        Greenlet.spawn(result.serve_forever)
+        sleep(0.1)
+
+        return result
+
+class SingleServerTestCase(BaseTestCase):
     def setUp(self):
         global _host, _port
 
-        self.server = ObjectoPlex((_host, _port),
-                                  middlewares=[
-                                      LegacySubscriptionMiddleware(),
-                                      StatisticsMiddleware(),
-                                      ChecksumMiddleware(),
-                                      RoutingMiddleware(),
-                                      ],
-                                  linked_servers=[])
-        gevent.signal(signal.SIGTERM, self.server.stop)
-        gevent.signal(signal.SIGINT, self.server.stop)
-        self.server_greenlet = Greenlet.spawn(self.server.serve_forever)
+        self.server = self.start_server(_host, _port)
         logger.info('Started server at %s:%s', *(self.server.address[:2]))
-        sleep(0.1)
+
+    def tearDown(self):
+        self.server.stop(timeout=0)
+        logger.info('Stopped server at %s:%s', *(self.server.address[:2]))
+
+class TwoServerTestCase(TestCase):
+    def setUp(self):
+        global _host, _port, _port2
+
+        self.server1 = self.start_server(_host, _port)
+        logger.info('Started server at %s:%s', *(self.server1.address[:2]))
+
+        self.server2 = self.start_server(_host, _port2,
+                                        linked_servers=[(_host, _port)])
+        logger.info('Started server at %s:%s', *(self.server2.address[:2]))
 
     def tearDown(self):
         self.server.stop(timeout=0)
@@ -120,22 +141,25 @@ class SubscriptionTest(SingleServerTestCase):
         obj.serialize(socket=self.sock)
         return obj
 
-    def test_receive_all_subscription(self):
-        reply, time = reply_for_object(self.make_send_subscription(), self.sock)
+    def assertValidReceiveAllReply(self, reply):
         self.assertIsNotNone(reply)
         self.assertIn('routing-id', reply.metadata)
         self.assertIn('event', reply.metadata)
         self.assertEquals(reply.metadata['event'], 'routing/subscribe/reply')
 
+    def test_receive_all_subscription(self):
+        reply, time = reply_for_object(self.make_send_subscription(), self.sock)
+        self.assertValidReceiveAllReply(reply)
+
     def test_receive_all_subscription_with_100ms_timeout(self):
         reply, time = reply_for_object(self.make_send_subscription(),
                                        self.sock, timeout_secs=0.1)
-        self.assertIsNotNone(reply)
+        self.assertValidReceiveAllReply(reply)
 
     def test_receive_all_subscription_with_10ms_timeout(self):
         reply, time = reply_for_object(self.make_send_subscription(),
                                        self.sock, timeout_secs=0.01)
-        self.assertIsNotNone(reply)
+        self.assertValidReceiveAllReply(reply)
 
 class ClientRegistryTest(ClientRegistryTestCase):
     def setUp(self):
@@ -200,7 +224,8 @@ def main():
                       help="logging level DEBUG")
 
     parser.add_option("--host", dest="host", default="localhost")
-    parser.add_option("--port", dest="port", default=7890, type="int")
+    parser.add_option("--port", dest="port", default=17890, type="int")
+    parser.add_option("--port2", dest="port2", default=17891, type="int")
 
     opts, args = parser.parse_args()
 
@@ -210,6 +235,7 @@ def main():
 
     _host = opts.host
     _port = opts.port
+    _port2 = opts.port2
 
     unittest_main()
 
