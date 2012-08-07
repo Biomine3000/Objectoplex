@@ -1,17 +1,28 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import logging
+import signal
+
 from unittest import TestCase
 from unittest import main as unittest_main
 from optparse import OptionParser
 from datetime import datetime, timedelta
 
 import socket
-import select
 import json
 from uuid import uuid4
 
+import gevent
+
+from gevent import Greenlet
+from gevent import socket
+from gevent import sleep
+from gevent import select
+
 from system import BusinessObject, InvalidObject
+from server import ObjectoPlex
+from middleware import *
+from services.client_registry import ClientRegistry
 
 logger = logging.getLogger("server_tester")
 
@@ -41,27 +52,72 @@ def reply_for_object(obj, sock, timeout_secs=1.0):
             return reply, (datetime.now() - started).seconds
 
 
-class ConnectionTest(TestCase):
+class SingleServerTestCase(TestCase):
+    def setUp(self):
+        global _host, _port
+
+        self.server = ObjectoPlex((_host, _port),
+                                  middlewares=[
+                                      LegacySubscriptionMiddleware(),
+                                      StatisticsMiddleware(),
+                                      ChecksumMiddleware(),
+                                      RoutingMiddleware(),
+                                      ],
+                                  linked_servers=[])
+        gevent.signal(signal.SIGTERM, self.server.stop)
+        gevent.signal(signal.SIGINT, self.server.stop)
+        self.server_greenlet = Greenlet.spawn(self.server.serve_forever)
+        logger.info('Started server at %s:%s', *(self.server.address[:2]))
+        sleep(0.1)
+
+    def tearDown(self):
+        self.server.stop(timeout=0)
+        logger.info('Stopped server at %s:%s', *(self.server.address[:2]))
+
+class ClientRegistryTestCase(SingleServerTestCase):
+    def setUp(self):
+        global _host, _port
+        super(ClientRegistryTestCase, self).setUp()
+
+        self.service = ClientRegistry(_host, _port)
+        self.service_greenlet = Greenlet(self.service.start)
+        gevent.signal(signal.SIGTERM, self.service_greenlet.kill)
+        gevent.signal(signal.SIGINT, self.service_greenlet.kill)
+        self.service_greenlet.start()
+        logger.info('Started client registry, connecting to %s:%s', _host, _port)
+
+    def tearDown(self):
+        global _host, _port
+        self.service.cleanup()
+        self.service_greenlet.kill()
+        logger.info('Stopped client registry, connecting to %s:%s', _host, _port)
+        super(ClientRegistryTestCase, self).tearDown()
+
+
+class ConnectionTest(SingleServerTestCase):
     def test_server_accepts_connection(self):
         global _host, _port
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.connect((_host, _port))
         sock.close()
+        logger.info("Closed socket")
 
-class SubscriptionTest(TestCase):
+class SubscriptionTest(SingleServerTestCase):
     def setUp(self):
+        super(SubscriptionTest, self).setUp()
         global _host, _port
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.connect((_host, _port))
 
     def tearDown(self):
         self.sock.close()
+        super(SubscriptionTest, self).tearDown()
 
     def make_send_subscription(self):
         obj = BusinessObject({'event': 'routing/subscribe',
                               'receive-mode': 'all',
                               'types': 'all'}, None)
-        obj.serialize(self.sock)
+        obj.serialize(socket=self.sock)
         return obj
 
     def test_receive_all_subscription(self):
@@ -76,31 +132,33 @@ class SubscriptionTest(TestCase):
                                        self.sock, timeout_secs=0.1)
         self.assertIsNotNone(reply)
 
-    # def test_receive_all_subscription_with_10ms_timeout(self):
-    #     reply, time = reply_for_object(self.make_send_subscription(),
-    #                                    self.sock, timeout_secs=0.01)
-    #     self.assertIsNotNone(reply)
+    def test_receive_all_subscription_with_10ms_timeout(self):
+        reply, time = reply_for_object(self.make_send_subscription(),
+                                       self.sock, timeout_secs=0.01)
+        self.assertIsNotNone(reply)
 
-class ClientRegistryTest(TestCase):
+class ClientRegistryTest(ClientRegistryTestCase):
     def setUp(self):
         global _host, _port
+        super(ClientRegistryTest, self).setUp()
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.connect((_host, _port))
         obj = BusinessObject({'event': 'routing/subscribe',
                               'receive-mode': 'all',
                               'types': 'all'}, None)
-        obj.serialize(self.sock)
+        obj.serialize(socket=self.sock)
         resp, time = reply_for_object(obj, self.sock)
         self.routing_id = resp.metadata['routing-id']
 
     def tearDown(self):
         self.sock.close()
+        super(ClientRegistryTest, self).tearDown()
 
     def test_answers_to_service_call(self):
         list_obj = BusinessObject({'event': 'services/request',
                                    'name': 'clients',
                                    'request': 'list'}, None)
-        list_obj.serialize(self.sock)
+        list_obj.serialize(socket=self.sock)
         reply, time = reply_for_object(list_obj, self.sock)
         self.assertIsNotNone(reply)
 
@@ -110,12 +168,12 @@ class ClientRegistryTest(TestCase):
                               'request': 'join',
                               'client': str(uuid4()),
                               'user': str(uuid4())}, None)
-        obj.serialize(self.sock)
+        obj.serialize(socket=self.sock)
 
         list_obj = BusinessObject({'event': 'services/request',
                                    'name': 'clients',
                                    'request': 'list'}, None)
-        list_obj.serialize(self.sock)
+        list_obj.serialize(socket=self.sock)
         reply, time = reply_for_object(list_obj, self.sock)
         self.assertIsNotNone(reply, msg=u'No reply to service request')
 

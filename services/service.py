@@ -1,14 +1,21 @@
 # -*- coding: utf-8 -*-
 import logging
-import socket
-import select
 import signal
 import errno
 import fcntl
 
 from contextlib import contextmanager
-from Queue import Queue
-from time import sleep
+
+try:
+    from gevent import socket
+    from gevent import select
+    from gevent.queue import Queue
+    from gevent import sleep
+except ImportError, e:
+    import socket
+    import select
+    from Queue import Queue
+    from time import sleep
 
 from system import BusinessObject, InvalidObject
 
