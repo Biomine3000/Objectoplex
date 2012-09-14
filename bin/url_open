@@ -11,7 +11,6 @@ from os.path import getsize
 from optparse import OptionParser
 from os import environ as env
 
-from aes import AESModeOfOperation
 from system import BusinessObject
 from tv import subscription_object
 
