@@ -1,0 +1,58 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+from __future__ import print_function
+
+import socket
+import io
+
+from sys import exit, stdout
+
+from os.path import getsize
+from optparse import OptionParser
+from os import environ as env
+
+from aes import AESModeOfOperation
+from system import BusinessObject
+from tv import subscription_object
+
+def main():
+    parser = OptionParser()
+    parser.add_option("--host", dest="host", default=None)
+    parser.add_option("--port", dest="port", default=7890, type="int")
+
+    opts, args = parser.parse_args()
+
+    if opts.host is None:
+        parser.error("Host required (--host)")
+    if len(args) != 1:
+        parser.error("Please provide URL file name as first argument!")
+
+    metadata = {
+        'event': 'services/request',
+        'name': 'url_opener',
+        'request': 'open',
+        'user': env['USER'],
+        'host': socket.gethostname(),
+        'size': getsize(args[0]),
+        'type': 'text/url',
+        }
+
+    with io.FileIO(args[0], 'r') as f:
+        contents = bytearray(f.read())
+
+    obj = BusinessObject(metadata, contents)
+    subscription = subscription_object()
+    subscription.metadata['receive-mode'] = None
+
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.connect((opts.host, opts.port))
+
+    subscription.serialize(socket=sock)
+    obj.serialize(socket=sock)
+
+    # obj.serialize(file=stdout)
+    print("Object sent (payload size %i)!" % obj.metadata['size'])
+
+
+if __name__ == '__main__':
+    main()
