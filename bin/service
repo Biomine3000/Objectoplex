@@ -44,7 +44,7 @@ def main():
     module = imp.load_module(opts.module, file, pathname, description)
 
     try:
-        service = module.service(opts.host, opts.port)
+        service = module.service(opts.host, opts.port, args)
         service.start()
     except KeyboardInterrupt, kbi:
         service.cleanup()

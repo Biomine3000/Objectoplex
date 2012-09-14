@@ -55,7 +55,7 @@ class _MetaService(type):
 class Service(object):
     __metaclass__ = _MetaService
 
-    def __init__(self, host, port):
+    def __init__(self, host, port, args):
         self.host = host
         self.port = port
         self.logger = logging.getLogger(self.__class__.__service__)
