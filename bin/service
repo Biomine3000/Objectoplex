@@ -23,6 +23,7 @@ def main():
                       help="logging level DEBUG")
     parser.add_option("--host", dest="host", default="localhost")
     parser.add_option("--port", dest="port", default=7890, type="int")
+    parser.add_option("--activity-timeout", dest="timeout", default=60, type="int", metavar='SECONDS')
     parser.add_option("--module", dest="module", default=None)
 
     opts, args = parser.parse_args()
@@ -31,7 +32,8 @@ def main():
 
     if opts.debug:
         logging.basicConfig(level=logging.DEBUG)
-    logging.basicConfig(level=logging.INFO)
+    else:
+        logging.basicConfig(level=logging.INFO)
 
     logger = logging.getLogger(opts.module)
 
@@ -54,7 +56,7 @@ def main():
             service_args[parts[0]] = parts[1]
 
     try:
-        service = module.service(opts.host, opts.port, args=service_args)
+        service = module.service(opts.host, opts.port, activity_timeout=opts.timeout, args=service_args)
         service.start()
     except KeyboardInterrupt, kbi:
         service.cleanup()

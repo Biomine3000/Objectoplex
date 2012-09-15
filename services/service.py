@@ -5,6 +5,7 @@ import errno
 import fcntl
 
 from contextlib import contextmanager
+from datetime import datetime, timedelta
 
 try:
     from gevent import socket
@@ -38,6 +39,8 @@ def timeout(seconds):
         signal.signal(signal.SIGALRM, original_handler)
 
 
+class ConnectionTimeout(Exception): pass
+
 class _MetaService(type):
     def __new__(cls, clsname, clsbases, clsdict):  
         t = type.__new__(cls, clsname, clsbases, clsdict)  
@@ -55,9 +58,10 @@ class _MetaService(type):
 class Service(object):
     __metaclass__ = _MetaService
 
-    def __init__(self, host, port, args={}):
+    def __init__(self, host, port, activity_timeout=60, args={}):
         self.host = host
         self.port = port
+        self.activity_timeout = activity_timeout
         self.logger = logging.getLogger(self.__class__.__service__)
         self.queue = Queue()
         self.args = args
@@ -92,6 +96,8 @@ class Service(object):
                 self.receive()
             except socket.error, e:
                 self.logger.warning(u"{0}:{1}; {2}".format(self.host, self.port, e))
+            except ConnectionTimeout, e:
+                self.logger.warning(u"{0}:{1}; {2}".format(self.host, self.port, e))
 
             sleep_time = 10
             self.logger.warning("Disconnected, sleeping for %i seconds!" % sleep_time)
@@ -99,8 +105,21 @@ class Service(object):
             self.logger.info("Reconnecting...")
 
     def receive(self):
+        ping_timeout = timedelta(seconds=self.activity_timeout)
+        connection_timeout = timedelta(seconds=ping_timeout.seconds * 2)
+        ping_sent = False
+        last_heartbeat = datetime.now()
+
         while True:
             try:
+                if datetime.now() - last_heartbeat > ping_timeout and \
+                       not ping_sent:
+                    self.queue.put(BusinessObject({'event': 'ping'}, None))
+                    ping_sent = True
+                elif datetime.now() - last_heartbeat > connection_timeout and \
+                     ping_sent is True:
+                    raise ConnectionTimeout("Timeout! Last object received at %s (is the server responding to ping?)" % last_heartbeat)
+
                 if not self.queue.empty():
                     rlist, wlist, xlist = select.select([self.socket], [self.socket], [], 0.2)
                     if len(wlist) > 0:
@@ -112,6 +131,10 @@ class Service(object):
                         obj = BusinessObject.read_from_socket(self.socket)
                         if obj is None:
                             raise InvalidObject
+
+                        last_heartbeat = datetime.now()
+                        ping_sent = False
+
                         if obj.event == 'services/discovery':
                             response = self.handle_discovery(obj)
                             if response is not None:
