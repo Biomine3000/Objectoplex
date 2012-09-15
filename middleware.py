@@ -460,4 +460,5 @@ class PingPongMiddleware(Middleware):
             sender.send(BusinessObject({ 'event': 'pong',
                                          'routing-id': sender.routing_id,
                                          'in-reply-to': obj.id }, None), None)
-        return obj
+        else:
+            return obj
