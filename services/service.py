@@ -92,7 +92,11 @@ class Service(object):
                 self.receive()
             except socket.error, e:
                 self.logger.warning(u"{0}:{1}; {2}".format(self.host, self.port, e))
-            self.sleep(10)
+
+            sleep_time = 10
+            self.logger.warning("Disconnected, sleeping for %i seconds!" % sleep_time)
+            self.sleep(sleep_time)
+            self.logger.info("Reconnecting...")
 
     def receive(self):
         while True:
