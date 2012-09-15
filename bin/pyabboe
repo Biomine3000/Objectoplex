@@ -30,6 +30,7 @@ def main():
 
     server = ObjectoPlex((opts.host, opts.port),
                          middlewares=[
+                             PingPongMiddleware(),
                              LegacySubscriptionMiddleware(),
                              StatisticsMiddleware(),
                              ChecksumMiddleware(),
