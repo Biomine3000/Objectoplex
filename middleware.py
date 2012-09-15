@@ -451,3 +451,13 @@ class LegacySubscriptionMiddleware(Middleware):
                                 'client': obj.metadata.get('name', 'no-client'),
                                 'user': obj.metadata.get('user', 'no-user'),
                                 'route': obj.metadata.get('route', []) }, None)
+
+
+class PingPongMiddleware(Middleware):
+    def handle(self, obj, sender, *args, **kwargs):
+        if obj.event == 'ping' and isinstance(sender, RoutedSystemClient) and \
+           sender.subscribed:
+            sender.send(BusinessObject({ 'event': 'pong',
+                                         'routing-id': sender.routing_id,
+                                         'in-reply-to': obj.id }, None), None)
+        return obj

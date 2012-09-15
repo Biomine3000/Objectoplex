@@ -56,6 +56,7 @@ class BaseTestCase(TestCase):
     def start_server(self, host, port, linked_servers=[]):
         result = ObjectoPlex((host, port),
                              middlewares=[
+                                 PingPongMiddleware(),
                                  LegacySubscriptionMiddleware(),
                                  StatisticsMiddleware(),
                                  ChecksumMiddleware(),
@@ -96,7 +97,6 @@ class BaseTestCase(TestCase):
         self.assertEquals(obj.metadata['user'], d['user'], msg=u"attribute 'user' not equal")
 
 
-
 class SingleServerTestCase(BaseTestCase):
     def setUp(self):
         global _host, _port
@@ -135,9 +135,9 @@ class ConnectionTest(SingleServerTestCase):
         sock.close()
         logger.info("Closed socket")
 
-class SubscriptionTest(SingleServerTestCase):
+class SubscriptionTestCase(SingleServerTestCase):
     def setUp(self):
-        super(SubscriptionTest, self).setUp()
+        super(SubscriptionTestCase, self).setUp()
 
         global _host, _port
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -146,7 +146,7 @@ class SubscriptionTest(SingleServerTestCase):
     def tearDown(self):
         self.sock.close()
 
-        super(SubscriptionTest, self).tearDown()
+        super(SubscriptionTestCase, self).tearDown()
 
     def make_send_subscription(self):
         obj = BusinessObject({'event': 'routing/subscribe',
@@ -175,10 +175,28 @@ class SubscriptionTest(SingleServerTestCase):
                                        self.sock, timeout_secs=0.01)
         self.assertValidReceiveAllReply(reply)
 
+class PingPongTestCase(SubscriptionTestCase):
+    def test_server_responds_to_ping_after_subscription(self):
+        self.make_send_subscription()
 
-class ClientRegistryTest(SingleServerTestCase):
+        reply, time = reply_for_object(self.make_send_ping_object(), self.sock)
+        self.assertIsNotNone(reply)
+        self.assertIn('routing-id', reply.metadata)
+        self.assertIn('event', reply.metadata)
+        self.assertEquals(reply.metadata['event'], 'pong')
+
+    def test_server_shouldnt_respond_to_ping_before_subscription(self):
+        reply, time = reply_for_object(self.make_send_ping_object(), self.sock)
+        self.assertIsNone(reply)
+
+    def make_send_ping_object(self):
+        obj = BusinessObject({'event': 'ping'}, None)
+        obj.serialize(socket=self.sock)
+        return obj
+
+class ClientRegistryTestCase(SingleServerTestCase):
     def setUp(self):
-        super(ClientRegistryTest, self).setUp()
+        super(ClientRegistryTestCase, self).setUp()
 
         self.start_client_registry(_host, _port) # TODO: multiple inheritance
         logger.info('Started client registry, connecting to %s:%s', _host, _port)
@@ -199,7 +217,7 @@ class ClientRegistryTest(SingleServerTestCase):
         self.stop_client_registry()
         logger.info('Stopped client registry')
 
-        super(ClientRegistryTest, self).tearDown()
+        super(ClientRegistryTestCase, self).tearDown()
 
     def test_answers_to_service_call(self):
         list_obj = BusinessObject({'event': 'services/request',
