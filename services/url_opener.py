@@ -7,8 +7,6 @@ from Tkinter import *
 from system import BusinessObject
 from service import Service
 
-class InvalidFormatError(Exception): pass
-
 class App(object):
     def __init__(self, master, command, url, timeout, logger):
         self.master = master
@@ -48,22 +46,14 @@ class App(object):
 class UrlOpener(Service):
     __service__ = 'url_opener'
 
-    def __init__(self, host, port, args):
-        super(UrlOpener, self).__init__(host, port, args)
-
-        params = {}
+    def __init__(self, *args, **kwargs):
+        super(UrlOpener, self).__init__(*args, **kwargs)
 
         self.logger.info("Accepted parameters (key=value): command, user, timeout (in ms)")
 
-        for arg in args:
-            if '=' not in arg:
-                raise InvalidFormatError("url_opener parameters should be in the form key=value")
-            parts = arg.split('=', 1)
-            params[parts[0]] = parts[1]
-
-        self.user = params.get('user', env['USER'])
-        self.command = params.get('command', 'open')
-        self.timeout = int(params.get('timeout', '1500'))
+        self.user = self.args.get('user', env['USER'])
+        self.command = self.args.get('command', 'open')
+        self.timeout = int(self.args.get('timeout', '1500'))
         self.logger.info("Using command \"%s\" for opening URLs" % self.command)
         self.logger.info("Opening URLs from user \"%s\"" % self.user)
         self.logger.info("Using %ims for GUI timeout" % self.timeout)
