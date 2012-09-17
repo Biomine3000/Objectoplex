@@ -129,7 +129,16 @@ class StdErrMiddleware(Middleware):
 
 
 class RoutedSystemClient(SystemClient):
-    def has_routing_id(self, routing_id):
+    def has_routing_id(self, routing_id_or_list):
+        if isinstance(routing_id_or_list, basestring):
+            return self._check_routing_id(routing_id_or_list)
+        else:
+            for routing_id in routing_id_or_list:
+                if self._check_routing_id(routing_id):
+                    return True
+            return False
+
+    def _check_routing_id(self, routing_id):
         if self.routing_id == routing_id:
             return True
         elif routing_id in self.extra_routing_ids:

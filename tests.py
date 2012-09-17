@@ -230,7 +230,7 @@ class RecipientTestCase(SingleServerTestCase):
         super(RecipientTestCase, self).setUp()
         self.clients = []
 
-        for i in xrange(6):
+        for i in xrange(4):
             self.clients.append(self.make_subscribe_client())
 
     def tearDown(self):
@@ -272,27 +272,32 @@ class RecipientTestCase(SingleServerTestCase):
 
         for client, routing_id in self.clients[2:]:
             reply = read_object_with_timeout(client, timeout_secs=0.1, select=select)
-            if reply is not None and reply.event is not None:
+            if reply is not None:
+                self.assertIsNotNone(reply.event)
+            while reply is not None and reply.event is not None:
                 reply = read_object_with_timeout(client, timeout_secs=0.1, select=select)
+
             self.assertIsNone(reply)
 
-    # Waiting for multicast implementation
-    # def test_server_delivers_to_multiple_recipients(self):
-    #     client, routing_id = self.clients[0]
-    #     to_client, to_routing_id = self.clients[1]
-    #     to_client2, to_routing_id2 = self.clients[2]
+    def test_server_delivers_to_multiple_recipients(self):
+        client, routing_id = self.clients[0]
+        to_client, to_routing_id = self.clients[1]
+        to_client2, to_routing_id2 = self.clients[2]
 
-    #     obj = BusinessObject({'to': [to_routing_id, to_routing_id2]}, None)
-    #     obj.serialize(socket=client)
+        obj = BusinessObject({'to': [to_routing_id, to_routing_id2]}, None)
+        obj.serialize(socket=client)
 
-    #     self.assert_receives_object(to_client, obj.id)
-    #     self.assert_receives_object(to_client2, obj.id)
+        self.assert_receives_object(to_client, obj.id)
+        self.assert_receives_object(to_client2, obj.id)
 
-    #     for client, routing_id in self.clients[3:]:
-    #         reply = read_object_with_timeout(client, timeout_secs=0.1, select=select)
-    #         if reply is not None and reply.event is not None:
-    #             reply = read_object_with_timeout(client, timeout_secs=0.1, select=select)
-    #         self.assertIsNone(reply)
+        for client, routing_id in self.clients[2:]:
+            reply = read_object_with_timeout(client, timeout_secs=0.1, select=select)
+            if reply is not None:
+                self.assertIsNotNone(reply.event)
+            while reply is not None and reply.event is not None:
+                reply = read_object_with_timeout(client, timeout_secs=0.1, select=select)
+
+            self.assertIsNone(reply)
 
     def assert_receives_object(self, sock, id):
         reply = None
