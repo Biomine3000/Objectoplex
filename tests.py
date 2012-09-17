@@ -250,8 +250,9 @@ class RecipientTestCase(SingleServerTestCase):
         obj = BusinessObject({}, None)
         obj.serialize(socket=client)
 
-        reply = read_object_with_timeout(client, timeout_secs=0.5, select=select)
+        reply = read_object_with_timeout(client, timeout_secs=0.1, select=select)
         self.assertIsNone(reply)
+        client.close()
 
     def test_server_delivers_to_all(self):
         obj = BusinessObject({}, None)
@@ -259,6 +260,21 @@ class RecipientTestCase(SingleServerTestCase):
 
         for sock, routing_id in self.clients:
             self.assert_receives_object(sock, obj.id)
+
+    def test_server_delivers_to_specified_recipient(self):
+        client, routing_id = self.clients[0]
+        to_client, to_routing_id = self.clients[1]
+
+        obj = BusinessObject({'to': to_routing_id}, None)
+        obj.serialize(socket=client)
+
+        self.assert_receives_object(to_client, obj.id)
+
+        for client, routing_id in self.clients[2:]:
+            reply = read_object_with_timeout(client, timeout_secs=0.1, select=select)
+            if reply is not None and reply.event is not None:
+                reply = read_object_with_timeout(client, timeout_secs=0.1, select=select)
+            self.assertIsNone(reply)
 
     def assert_receives_object(self, sock, id):
         reply = None
