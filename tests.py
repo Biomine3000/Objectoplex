@@ -23,33 +23,9 @@ from system import BusinessObject, InvalidObject
 from server import ObjectoPlex
 from middleware import *
 from services.client_registry import ClientRegistry
+from utils import reply_for_object, read_object_with_timeout
 
 logger = logging.getLogger("tests")
-
-
-def reply_for_object(obj, sock, timeout_secs=1.0):
-    """
-    Waits for a reply to a sent object (connected by in-reply-to field).
-
-    Returns the object and seconds elapsed as tuple (obj, secs).
-    """
-    started = datetime.now()
-    delta = timedelta(seconds=timeout_secs)
-    while True:
-        rlist, wlist, xlist = select.select([sock], [], [], 0.0001)
-
-        if datetime.now() > started + delta:
-            return None, timeout_secs
-
-        if len(rlist) == 0:
-            continue
-
-        reply = BusinessObject.read_from_socket(sock)
-
-        if reply is None:
-            raise InvalidObject
-        elif reply.metadata.get('in-reply-to', None) == obj.id:
-            return reply, (datetime.now() - started).seconds
 
 
 class BaseTestCase(TestCase):
@@ -162,31 +138,31 @@ class SubscriptionTestCase(SingleServerTestCase):
         self.assertEquals(reply.metadata['event'], 'routing/subscribe/reply')
 
     def test_receive_all_subscription(self):
-        reply, time = reply_for_object(self.make_send_subscription(), self.sock)
+        reply, time = reply_for_object(self.make_send_subscription(), self.sock, select=select)
         self.assertValidReceiveAllReply(reply)
 
     def test_receive_all_subscription_with_100ms_timeout(self):
         reply, time = reply_for_object(self.make_send_subscription(),
-                                       self.sock, timeout_secs=0.1)
+                                       self.sock, timeout_secs=0.1, select=select)
         self.assertValidReceiveAllReply(reply)
 
     def test_receive_all_subscription_with_10ms_timeout(self):
         reply, time = reply_for_object(self.make_send_subscription(),
-                                       self.sock, timeout_secs=0.01)
+                                       self.sock, timeout_secs=0.01, select=select)
         self.assertValidReceiveAllReply(reply)
 
 class PingPongTestCase(SubscriptionTestCase):
     def test_server_responds_to_ping_after_subscription(self):
         self.make_send_subscription()
 
-        reply, time = reply_for_object(self.make_send_ping_object(), self.sock)
+        reply, time = reply_for_object(self.make_send_ping_object(), self.sock, select=select)
         self.assertIsNotNone(reply)
         self.assertIn('routing-id', reply.metadata)
         self.assertIn('event', reply.metadata)
         self.assertEquals(reply.metadata['event'], 'pong')
 
     def test_server_shouldnt_respond_to_ping_before_subscription(self):
-        reply, time = reply_for_object(self.make_send_ping_object(), self.sock)
+        reply, time = reply_for_object(self.make_send_ping_object(), self.sock, select=select)
         self.assertIsNone(reply)
 
     def make_send_ping_object(self):
@@ -208,7 +184,7 @@ class ClientRegistryTestCase(SingleServerTestCase):
                               'receive-mode': 'all',
                               'types': 'all'}, None)
         obj.serialize(socket=self.sock)
-        resp, time = reply_for_object(obj, self.sock)
+        resp, time = reply_for_object(obj, self.sock, select=select)
         self.routing_id = resp.metadata['routing-id']
 
     def tearDown(self):
@@ -226,7 +202,7 @@ class ClientRegistryTestCase(SingleServerTestCase):
         list_obj.serialize(socket=self.sock)
         logger.info(self.server)
         logger.info(self.service)
-        reply, time = reply_for_object(list_obj, self.sock)
+        reply, time = reply_for_object(list_obj, self.sock, select=select)
         self.assertIsNotNone(reply)
 
     def test_correct_registration(self):
@@ -241,13 +217,79 @@ class ClientRegistryTestCase(SingleServerTestCase):
                                    'name': 'clients',
                                    'request': 'list'}, None)
         list_obj.serialize(socket=self.sock)
-        reply, time = reply_for_object(list_obj, self.sock)
+        reply, time = reply_for_object(list_obj, self.sock, select=select)
         self.assertIsNotNone(reply, msg=u'No reply to service request')
 
         payload_text = reply.payload.decode('utf-8')
         payload = json.loads(payload_text)
 
         self.assertCorrectClientListReply(obj, payload)
+
+class RecipientTestCase(SingleServerTestCase):
+    def setUp(self):
+        super(RecipientTestCase, self).setUp()
+        self.clients = []
+
+        for i in xrange(4):
+            self.clients.append(self.make_subscribe_client())
+
+    def tearDown(self):
+        for sock, routing_id in self.clients:
+            sock.close()
+
+        super(RecipientTestCase, self).tearDown()
+
+    def test_server_delivers_to_sender(self):
+        obj = BusinessObject({}, None)
+        obj.serialize(socket=self.clients[0][0])
+        self.assert_receives_object(self.clients[0][0], obj.id)
+
+    def test_server_doesnt_deliver_when_no_echo(self):
+        client, routing_id = self.make_subscribe_client(no_echo=True)
+
+        obj = BusinessObject({}, None)
+        obj.serialize(socket=client)
+
+        reply = read_object_with_timeout(client, timeout_secs=0.5, select=select)
+        self.assertIsNone(reply)
+
+    def test_server_delivers_to_all(self):
+        obj = BusinessObject({}, None)
+        obj.serialize(socket=self.clients[0][0])
+
+        for sock, routing_id in self.clients:
+            self.assert_receives_object(sock, obj.id)
+
+    def assert_receives_object(self, sock, id):
+        reply = None
+        while reply is None or reply.event != None:
+            reply = read_object_with_timeout(sock, select=select)
+
+        self.assertIsNotNone(reply)
+        self.assertEquals(reply.id, id)
+
+    def make_subscribe_client(self, no_echo=False):
+        global _host, _port
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect((_host, _port))
+
+        subscription = self.make_send_subscription(sock, no_echo=no_echo)
+        resp, time = reply_for_object(subscription, sock, select=select)
+        routing_id = resp.metadata['routing-id']
+
+        return sock, routing_id
+
+    def make_send_subscription(self, sock, no_echo=False):
+        metadata = {'event': 'routing/subscribe',
+                    'receive-mode': 'all',
+                    'types': 'all'}
+
+        if no_echo:
+            metadata['receive-mode'] = 'no_echo'
+
+        obj = BusinessObject(metadata, None)
+        obj.serialize(socket=sock)
+        return obj
 
 
 def main():

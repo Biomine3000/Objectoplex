@@ -337,7 +337,8 @@ class RoutingMiddleware(Middleware):
 
         if 'route' in obj.metadata:
             if isinstance(recipient, RoutedSystemClient) and \
-                   recipient.routing_id in obj.metadata['route']:
+                   recipient.routing_id in obj.metadata['route'] and \
+                   len(obj.metadata['route']) > 2:
                 return False, 'recipient.routing_id in route'
 
             if isinstance(sender, RoutedSystemClient) and \
