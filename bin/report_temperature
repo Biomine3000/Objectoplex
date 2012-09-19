@@ -1,0 +1,85 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+from __future__ import print_function
+
+import socket
+import json
+
+from sys import exit, stdout, stderr
+
+from os.path import getsize
+from optparse import OptionParser
+from os import environ as env
+from codecs import getwriter
+
+from system import BusinessObject
+from tv import subscription_object
+from utils import reply_for_object
+
+e8 = getwriter('utf-8')(stderr)
+
+def perr(*args, **kwargs):
+    if 'file' not in kwargs:
+        kwargs['file'] = e8
+    print(*args, **kwargs)
+
+def main():
+    parser = OptionParser()
+    parser.add_option("--host", dest="host", default=None)
+    parser.add_option("--port", dest="port", default=7890, type="int")
+
+    parser.add_option("--sensor-name", dest="sensor_name", default=None)
+    parser.add_option("--sensor-value", dest="sensor_value", default=-100.0, type="float")
+
+    opts, args = parser.parse_args()
+
+    if opts.host is None:
+        parser.error("Host required (--host)")
+    if opts.sensor_name is None:
+        parser.error("Sensor name required!")
+    if opts.sensor_value == -100.0:
+        parser.error("Sensor value required!")
+
+    sensor_dict = { 'sensor': opts.sensor_name,
+                    'value': opts.sensor_value }
+    sensors_list = [sensor_dict]
+
+    payload = bytearray(json.dumps(sensors_list, ensure_ascii=False), encoding='utf-8')
+
+    metadata = {
+        'event': 'services/request',
+        'name': 'temperature_db',
+        'request': 'insert',
+        'user': env['USER'],
+        'host': socket.gethostname(),
+        'size': len(payload),
+        'type': 'text/json',
+        }
+
+    obj = BusinessObject(metadata, payload)
+    subscription = subscription_object()
+    subscription.metadata['receive-mode'] = 'no_echo'
+
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.connect((opts.host, opts.port))
+
+    subscription.serialize(socket=sock)
+    obj.serialize(socket=sock)
+
+    perr(u"# Sensor {0}: {1}".format(sensor_dict['sensor'], sensor_dict['value']))
+    perr("# Object sent (payload size %i)!" % obj.metadata['size'])
+
+    reply, time = reply_for_object(obj, sock, timeout_secs=10.0)
+
+    if reply is None:
+        exit(u"# Didn't receive reply in {0}s".format(time))
+    else:
+        if 'error' in reply.metadata:
+            exit(u"# Received error: {0}".format(reply.metadata['error']))
+
+    perr(u"# Received reply: {0} in {1}s".format(json.loads(reply.payload.decode('utf-8')),
+                                                 time))
+
+
+if __name__ == '__main__':
+    main()
