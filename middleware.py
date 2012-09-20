@@ -63,7 +63,7 @@ class StatisticsMiddleware(Middleware):
         self.objects_by_type = defaultdict(int)
         self.events_by_type = defaultdict(int)
         self.started = datetime.now()
-        self.average_queue = 0
+        self.average_send_queue_length = 0
 
     def handle(self, obj, sender, clients):
         self.received_objects += 1
