@@ -8,6 +8,7 @@ from os.path import expanduser
 from datetime import datetime, timedelta
 from optparse import OptionParser
 
+import psycopg2, sqlalchemy
 from sqlalchemy.ext.declarative import declarative_base
 Base = declarative_base()
 from sqlalchemy import create_engine, Column, Integer, Float, String, DateTime
@@ -49,22 +50,39 @@ class TemperatureReading(Base):
                  u"value": self.value,
                  u"created": self.created.isoformat() }
 
+
 class TemperatureDB(Service):
     __service__ = 'temperature_db'
 
     def __init__(self, *args, **kwargs):
         super(TemperatureDB, self).__init__(*args, **kwargs)
-        self.logger.info("Accepted parameters (key=value): config-file (ini-format with section 'database' containing 'username', 'password', 'database')")
+        self.logger.info("Accepted parameters (key=value): config-file (ini-format with section 'database' containing 'username', 'password', 'database', 'echo')")
         self.config_file = expanduser(self.args['config-file'])
+        self.config = read_config(self.config_file)
+        self.init_db_session()
 
-        config = read_config(self.config_file)
-        self.username = config.get('database', 'username')
-        self.password = config.get('database', 'password')
-        self.database = config.get('database', 'database')
-
-        self.engine = create_engine(postgres_url(config), echo=True)
+    def init_db_session(self):
+        self.engine = create_engine(postgres_url(self.config),
+                                    echo=self.config.getboolean('database', 'echo'))
         Session = sessionmaker(bind=self.engine)
         self.session = Session()
+
+    def ensure_connection_up(self):
+        def simple_query():
+            result = self.session.execute(u"SELECT 1;")
+            res = result.fetchone()
+
+        try:
+            simple_query()
+        except sqlalchemy.exc.OperationalError, oe:
+            self.logger.warning("Test query to the server failed, restarting database connection... (%s)" % str(oe.orig).strip())
+            self.init_db_session()
+            simple_query()
+            self.logger.warning("Database connection successfully re-initialized!")
+        except Exception, e:
+            import traceback
+            traceback.print_exc()
+            raise e
 
     def handle(self, obj):
         self.logger.debug(u"Request {0}".format(obj.metadata))
@@ -73,6 +91,8 @@ class TemperatureDB(Service):
         error = None
 
         try:
+            self.ensure_connection_up()
+
             request = obj.metadata['request']
             if request == 'insert':
                 reply = self.insert(obj)
