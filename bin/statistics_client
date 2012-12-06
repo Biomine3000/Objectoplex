@@ -1,0 +1,73 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+from __future__ import print_function
+
+import socket
+import select
+import logging
+import json
+
+from optparse import OptionParser
+from sys import stdout, stderr, exit
+from codecs import getwriter
+from datetime import datetime, timedelta
+
+from system import BusinessObject, InvalidObject
+
+logger = logging.getLogger('statistics_client')
+u8 = getwriter('utf-8')(stdout)
+e8 = getwriter('utf-8')(stderr)
+
+def main():
+    parser = OptionParser(description='Query server for statistics')
+    parser.add_option("--host", dest="host", default="localhost")
+    parser.add_option("--port", dest="port", default=7890, type=int)
+    parser.add_option("-d", "--debug", action="store_true", dest="debug", default=False,
+                      help="logging level DEBUG")
+
+    opts, args = parser.parse_args()
+
+    if opts.debug:
+        logging.basicConfig(level=logging.DEBUG)
+        logger.debug("Debug logging turned on!")
+    logging.basicConfig(level=logging.INFO)
+
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.connect((opts.host, opts.port))
+
+    reg = BusinessObject({'event': 'routing/subscribe',
+                          'receive_mode': 'all',
+                          'types': 'all'}, None)
+    reg.serialize(socket=sock)
+    logger.debug("Sent registration object: {0}".format(reg.metadata))
+
+    req = BusinessObject({'event': 'server/statistics'}, None)
+    req.serialize(sock)
+    logger.debug(u"Sent statistics call: {0}".format(req.metadata))
+
+    started = datetime.now()
+    while True:
+        rlist, wlist, xlist = select.select([sock], [], [], 0.1)
+        if datetime.now() - timedelta(seconds=3) > started:
+            exit(u"No reply within 3 seconds, timed out!")
+        elif len(rlist) > 0:
+            resp = BusinessObject.read_from_socket(sock)
+            if resp is None:
+                raise InvalidObject
+            elif resp.event == 'server/statistics/reply':
+                if 'statistics' in resp.metadata:
+                    print(json.dumps(resp.metadata['statistics'], indent=2,
+                                     ensure_ascii=False), file=u8)
+                else:
+                    print(json.dumps(json.loads(resp.payload.decode('utf-8')),
+                                     indent=2, ensure_ascii=False), file=u8)
+                break
+
+    sock.close()
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except KeyboardInterrupt, ke:
+        print("Exiting.")

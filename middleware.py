@@ -3,6 +3,7 @@ from __future__ import print_function
 
 import hashlib
 import logging
+import json
 
 from datetime import datetime, timedelta
 from collections import defaultdict
@@ -97,21 +98,26 @@ class StatisticsMiddleware(Middleware):
         self.clients_disconnected_total += 1
 
     def send_statistics(self, client, original_id):
+        statistics = {
+            'received objects': self.received_objects,
+            'clients connected total': self.clients_connected_total,
+            'clients disconnected total': self.clients_disconnected_total,
+            'objects by type': self.objects_by_type,
+            'events by type': self.events_by_type,
+            'client count': self.client_count,
+            'bytes in': self.bytes_in,
+            'average send queue length': self.average_send_queue_length,
+            }
+        payload = bytearray(json.dumps(statistics, ensure_ascii=False), encoding='utf-8')
+
         metadata = {
             'event': 'server/statistics/reply',
             'in-reply-to': original_id,
-            'statistics': {
-                'received objects': self.received_objects,
-                'clients connected total': self.clients_connected_total,
-                'clients disconnected total': self.clients_disconnected_total,
-                'objects by type': self.objects_by_type,
-                'events by type': self.events_by_type,
-                'client count': self.client_count,
-                'bytes in': self.bytes_in,
-                'average send queue length': self.average_send_queue_length,
-                }
+            'size': len(payload),
+            'type': 'text/json'
             }
-        client.send(BusinessObject(metadata, None), None)
+
+        client.send(BusinessObject(metadata, payload), None)
 
 
 class StdErrMiddleware(Middleware):
