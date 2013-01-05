@@ -5,6 +5,9 @@ from datetime import datetime, timedelta
 
 from system import BusinessObject
 
+def _total_seconds(delta):
+    return (delta.microseconds + (delta.seconds + delta.days * 24 * 3600) * 1e6) / 1e6
+
 def reply_for_object(obj, sock, timeout_secs=1.0, select=select):
     """
     Waits for a reply to a sent object (connected by in-reply-to field).
@@ -30,7 +33,11 @@ def reply_for_object(obj, sock, timeout_secs=1.0, select=select):
         if reply is None:
             raise InvalidObject
         elif reply.metadata.get('in-reply-to', None) == obj.id:
-            return reply, (datetime.now() - started).total_seconds()
+            took = datetime.now() - started
+            if hasattr(took, 'total_seconds'):
+                return reply, took.total_seconds()
+            else:
+                return reply, _total_seconds(took)
 
 
 def read_object_with_timeout(sock, timeout_secs=1.0, select=select):
