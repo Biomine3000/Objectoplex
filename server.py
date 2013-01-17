@@ -169,19 +169,12 @@ class ObjectoPlex(StreamServer):
         self.link_to_servers = Queue()
         for linked_server in linked_servers:
             self.link_to_servers.put(linked_server)
-
         self.linker = Greenlet.spawn(self._linker)
-        gevent.signal(signal.SIGTERM, self.linker.kill)
-        gevent.signal(signal.SIGINT, self.linker.kill)
 
         self.unregistrable = Queue()
         self.client_manager = Greenlet.spawn(self._client_manager)
-        gevent.signal(signal.SIGTERM, self.client_manager.kill)
-        gevent.signal(signal.SIGINT, self.client_manager.kill)
 
         self.timer = Timer(self)
-        gevent.signal(signal.SIGTERM, self.timer.kill)
-        gevent.signal(signal.SIGINT, self.timer.kill)
         self.timer.start()
 
     def _linker(self):
