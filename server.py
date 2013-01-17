@@ -101,8 +101,14 @@ class SystemClient(object):
         self.sender.start()
 
     def kill(self):
+        if gevent.getcurrent() in [self.receiver, self.sender]:
+            logger.error("SystemClient.kill() may not be called by the client's greenlets!")
+            self.gateway.unregister(self)
+            return
+
         self.receiver.kill()
         self.sender.kill()
+        self.socket.close()
 
     def send(self, message, sender):
         self.queue.put(message)
@@ -111,9 +117,6 @@ class SystemClient(object):
         try:
             logger.warning(u"Closing connection to {0} due to {1}".format(self.address, message))
             self.gateway.unregister(self)
-            self.socket.close()
-            self.receiver.kill()
-            self.sender.kill()
         except Exception, e:
             traceback.print_exc()
             logger.error(u"Got {0} while trying to close and unregister a client!".format(e))
@@ -163,39 +166,60 @@ class ObjectoPlex(StreamServer):
         else:
             self.middlewares = middlewares
 
+        self.link_to_servers = Queue()
         for linked_server in linked_servers:
-            self.open_link(linked_server)
+            self.link_to_servers.put(linked_server)
+
+        self.linker = Greenlet.spawn(self._linker)
+        gevent.signal(signal.SIGTERM, self.linker.kill)
+        gevent.signal(signal.SIGINT, self.linker.kill)
+
+        self.unregistrable = Queue()
+        self.client_manager = Greenlet.spawn(self._client_manager)
+        gevent.signal(signal.SIGTERM, self.client_manager.kill)
+        gevent.signal(signal.SIGINT, self.client_manager.kill)
 
         self.timer = Timer(self)
         gevent.signal(signal.SIGTERM, self.timer.kill)
         gevent.signal(signal.SIGINT, self.timer.kill)
         self.timer.start()
 
-    def open_link(self, server):
+    def _linker(self):
         while True:
             try:
-                client = self._open_link_helper(server)
+                host, port = self.link_to_servers.get(timeout=30.0)
+                server = self._open_link((host, port))
                 for middleware in self.middlewares:
                     try:
-                        middleware.connect(client, set(self.clients))
+                        middleware.connect(server, set(self.clients))
                     except Exception, e:
                         traceback.print_exc()
                         logger.error(u"Got {0} while calling {1}.connect!".format(e, middleware))
-                break
+            except Empty, empty:
+                pass
             except socket.error, e:
-                logger.warning(u"Unable to connect to linked server {0}: {1}".format(server, e))
+                logger.warning(u"Unable to connect to linked server {0}:{1}".format(host, port))
+                self.link_to_servers.put((host, port))
+                sleep(10.0)
 
-            sleep(10)
+    def _client_manager(self):
+        while True:
+            try:
+                client = self.unregistrable.get(timeout=30.0)
+                self._unregister(client)
+            except Empty, empty:
+                pass
+            except Exception, e:
+                traceback.print_exc()
+                logger.error(u"Got {0} while trying to unregister {1}!".format(e, client))
 
-    def _open_link_helper(self, listener):
+    def _open_link(self, listener):
         logger.info(u"Connecting to server at {0}:{1}".format(*listener))
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.connect(listener)
         logger.info(u"Socket opened to {0}:{1}".format(*listener))
 
         client = SystemClient(sock, listener, self, server=True)
-        gevent.signal(signal.SIGTERM, client.kill)
-        gevent.signal(signal.SIGINT, client.kill)
 
         self.clients.add(client)
         client.host = listener[0]
@@ -206,8 +230,6 @@ class ObjectoPlex(StreamServer):
 
     def handle(self, source, address):
         client = SystemClient(source, address, self)
-        gevent.signal(signal.SIGTERM, client.kill)
-        gevent.signal(signal.SIGINT, client.kill)
 
         for middleware in self.middlewares:
             try:
@@ -231,6 +253,9 @@ class ObjectoPlex(StreamServer):
                 logger.error(u"Got {0} while calling {1}.handle!".format(e, middleware))
 
     def unregister(self, client):
+        self.unregistrable.put(client)
+
+    def _unregister(self, client):
         self.clients.remove(client)
 
         for middleware in self.middlewares:
@@ -240,5 +265,16 @@ class ObjectoPlex(StreamServer):
                 traceback.print_exc()
                 logger.error(u"Got {0} while calling {1}.disconnect!".format(e, middleware))
 
+        client.kill()
+
         if client.server and hasattr(client, 'host'):
-            self.open_link((client.host, client.port))
+            self.link_to_servers.put((client.host, client.port))
+
+    def stop(self, *args, **kwargs):
+        for client in self.clients:
+            try:
+                client.kill()
+            except:
+                pass
+
+        return StreamServer.stop(self, *args, **kwargs)
