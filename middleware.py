@@ -171,10 +171,10 @@ class RoutedSystemClient(SystemClient):
         instance.subscribed = False
         instance.subscribed_to = False
 
-def make_server_subscription(obj=None):
+def make_server_subscription(routing_id):
     metadata = {'event': 'routing/subscribe',
                 'role': 'server',
-                'routing-id': make_routing_id(obj),
+                'routing-id': routing_id,
                 'receive': 'all',
                 'subscriptions': 'all',
                 'name': 'Objectoplex',
@@ -247,13 +247,14 @@ class RoutingMiddleware(Middleware):
     def subscribe_to_server(self, client):
         if client.subscribed_to:
             return
-        subscription = make_server_subscription()
-        subscription.metadata['routing-id'] = self.routing_id
+        subscription = make_server_subscription(self.routing_id)
         client.send(subscription, None)
         client.subscribed_to = True
         logger.info(u"Subscribed to server {0}".format(client))
 
     def handle_server_subscription(self, obj, client, clients):
+        client.routing_id = obj.metadata['routing-id']
+
         client.extra_routing_ids = RoutingMiddleware.extra_routing_ids(obj)
         client.receive_mode = obj.metadata.get('receive-mode', obj.metadata.get('receive_mode', 'none'))
         client.types = obj.metadata.get('types', 'all')
