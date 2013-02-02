@@ -72,6 +72,33 @@ class BaseTestCase(TestCase):
         self.assertEquals(obj.metadata['client'], d['client'], msg=u"attribute 'client' not equal")
         self.assertEquals(obj.metadata['user'], d['user'], msg=u"attribute 'user' not equal")
 
+    def make_subscribe_client(self, host=None, port=None, no_echo=False):
+        global _host, _port
+        if host is None:
+            host = _host
+        if port is None:
+            port = _port
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect((host, port))
+
+        subscription = self.make_send_subscription(sock, no_echo=no_echo)
+        resp, time = reply_for_object(subscription, sock, select=select)
+        routing_id = resp.metadata['routing-id']
+
+        return sock, routing_id
+
+    def make_send_subscription(self, sock, no_echo=False):
+        metadata = {'event': 'routing/subscribe',
+                    'receive-mode': 'all',
+                    'types': 'all'}
+
+        if no_echo:
+            metadata['receive-mode'] = 'no_echo'
+
+        obj = BusinessObject(metadata, None)
+        obj.serialize(socket=sock)
+        return obj
+
 
 class SingleServerTestCase(BaseTestCase):
     def setUp(self):
@@ -97,11 +124,31 @@ class TwoServerTestCase(BaseTestCase):
         logger.info('Started server at %s:%s', *(self.server2.address[:2]))
 
     def tearDown(self):
-        self.server.stop(timeout=0)
-        logger.info('Stopped server at %s:%s', *(self.server.address[:2]))
+        self.server1.stop(timeout=0)
+        logger.info('Stopped server at %s:%s', *(self.server1.address[:2]))
+        self.server2.stop(timeout=0)
+        logger.info('Stopped server at %s:%s', *(self.server2.address[:2]))
 
         super(TwoServerTestCase, self).tearDown()
 
+class ThreeServerTestCase(BaseTestCase):
+    def setUp(self):
+        super(ThreeServerTestCase, self).setUp()
+
+        global _host, _port, _port2, _port3
+
+        self.server1 = self.start_server(_host, _port)
+        self.server2 = self.start_server(_host, _port2,
+                                         linked_servers=[(_host, _port)])
+        self.server3 = self.start_server(_host, _port3,
+                                         linked_servers=[(_host, _port), (_host, _port2)])
+
+    def tearDown(self):
+        self.server1.stop(timeout=0)
+        self.server2.stop(timeout=0)
+        self.server3.stop(timeout=0)
+
+        super(ThreeServerTestCase, self).tearDown()
 
 class ConnectionTest(SingleServerTestCase):
     def test_server_accepts_connection(self):
@@ -307,32 +354,36 @@ class RecipientTestCase(SingleServerTestCase):
         self.assertIsNotNone(reply)
         self.assertEquals(reply.id, id)
 
-    def make_subscribe_client(self, no_echo=False):
+
+class SPFRoutingTestCase(ThreeServerTestCase):
+    def setUp(self):
+        super(SPFRoutingTestCase, self).setUp()
+
+        # 1. 3 servers, linked in a triangle
+        # 2. clients on 1 server can talk to each other and no objects end up on extra servers
+        # 3. clients on separate servers can talk to each other and get objects only once
+
+    def server_statistics(self, host, port):
+        c = self.make_subscribe_client(host, port)
+        req = BusinessObject({'event': 'server/statistics'}, None)
+        req.serialize(sock)
+        logger.debug(u"Sent statistics call: {0}".format(req.metadata))
+        reply, time = reply_for_object(req, self.sock, select=select)
+        return json.loads(reply.payload.decode('utf-8'))
+
+    def test_on_same_server(self):
         global _host, _port
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.connect((_host, _port))
+        self.client1 = self.make_subscribe_client()
+        self.client2 = self.make_subscribe_client()
 
-        subscription = self.make_send_subscription(sock, no_echo=no_echo)
-        resp, time = reply_for_object(subscription, sock, select=select)
-        routing_id = resp.metadata['routing-id']
-
-        return sock, routing_id
-
-    def make_send_subscription(self, sock, no_echo=False):
-        metadata = {'event': 'routing/subscribe',
-                    'receive-mode': 'all',
-                    'types': 'all'}
-
-        if no_echo:
-            metadata['receive-mode'] = 'no_echo'
-
-        obj = BusinessObject(metadata, None)
-        obj.serialize(socket=sock)
-        return obj
+    def test_on_different_server(self):
+        global _host, _port2
+        self.client1 = self.make_subscribe_client()
+        self.client2 = self.make_subscribe_client(_host, _port2)
 
 
 def main():
-    global _host, _port
+    global _host, _port, _port2, _port3
     parser = OptionParser()
     parser.add_option("-d", "--debug", action="store_true", dest="debug", default=False,
                       help="logging level DEBUG")
@@ -340,6 +391,7 @@ def main():
     parser.add_option("--host", dest="host", default="localhost")
     parser.add_option("--port", dest="port", default=17890, type="int")
     parser.add_option("--port2", dest="port2", default=17891, type="int")
+    parser.add_option("--port3", dest="port3", default=17892, type="int")
 
     opts, args = parser.parse_args()
 
@@ -350,6 +402,7 @@ def main():
     _host = opts.host
     _port = opts.port
     _port2 = opts.port2
+    _port3 = opts.port3
 
     unittest_main()
 
