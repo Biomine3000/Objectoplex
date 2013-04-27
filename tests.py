@@ -8,6 +8,7 @@ from unittest import main as unittest_main
 from optparse import OptionParser
 from datetime import datetime, timedelta
 
+from subprocess import Popen, PIPE
 import socket
 import json
 from uuid import uuid4
@@ -16,8 +17,8 @@ import gevent
 
 from gevent import Greenlet
 from gevent import socket
-from gevent import sleep
 from gevent import select
+from gevent import sleep
 
 from system import BusinessObject, InvalidObject
 from server import ObjectoPlex
@@ -27,23 +28,25 @@ from utils import reply_for_object, read_object_with_timeout
 
 logger = logging.getLogger("tests")
 
+_host = None
+_port = None
+_host2 = None
+_host3 = None
+
 
 class BaseTestCase(TestCase):
     def start_server(self, host, port, linked_servers=[]):
-        result = ObjectoPlex((host, port),
-                             middlewares=[
-                                 PingPongMiddleware(),
-                                 LegacySubscriptionMiddleware(),
-                                 StatisticsMiddleware(),
-                                 ChecksumMiddleware(),
-                                 RoutingMiddleware(),
-                                 ],
-                             linked_servers=linked_servers)
-        gevent.signal(signal.SIGTERM, result.stop)
-        gevent.signal(signal.SIGINT, result.stop)
-        Greenlet.spawn(result.serve_forever)
-        sleep(0.1)
+        args = ['bin/pyabboe', '--host', host, '--port', str(port), '-d']
 
+        if len(linked_servers) > 0:
+            args.append('--link-to-servers')
+            for s in linked_servers:
+                args.append("{0}:{1}".format(s[0], s[1]))
+
+        logger.info("Launching with args %s" % repr(args))
+        result = Popen(args)
+        sleep(0.1)
+        
         return result
 
     def start_client_registry(self, host, port):
@@ -59,7 +62,7 @@ class BaseTestCase(TestCase):
         self.service_greenlet.kill()
         logger.info('Stopped client registry, connecting to %s:%s', _host, _port)
 
-    def assertCorrectClientListReply(self, obj, payload):
+    def assert_correct_client_list_reply(self, obj, payload):
         self.assertIn('clients', payload, msg=u"attribute 'clients' not in payload")
         d = None
         for dct in payload['clients']:
@@ -84,7 +87,6 @@ class BaseTestCase(TestCase):
         subscription = self.make_send_subscription(sock, no_echo=no_echo)
         resp, time = reply_for_object(subscription, sock, select=select)
         routing_id = resp.metadata['routing-id']
-
         return sock, routing_id
 
     def make_send_subscription(self, sock, no_echo=False):
@@ -99,17 +101,27 @@ class BaseTestCase(TestCase):
         obj.serialize(socket=sock)
         return obj
 
+    def assert_receives_object(self, sock, id):
+        reply = None
+        while reply is None or reply.event != None:
+            reply = read_object_with_timeout(sock, select=select)
+
+        self.assertIsNotNone(reply)
+        self.assertEquals(reply.id, id)
+
 
 class SingleServerTestCase(BaseTestCase):
     def setUp(self):
         global _host, _port
 
         self.server = self.start_server(_host, _port)
-        logger.info('Started server at %s:%s', *(self.server.address[:2]))
+        logger.info('Started server at %s:%s' % (_host, _port))
 
     def tearDown(self):
-        self.server.stop(timeout=0)
-        logger.info('Stopped server at %s:%s', *(self.server.address[:2]))
+        global _host, _port
+        self.server.terminate()
+        ret = self.server.wait()
+        logger.info('Stopped server at %s:%s (code %i)' % (_host, _port, ret))
 
 class TwoServerTestCase(BaseTestCase):
     def setUp(self):
@@ -117,17 +129,20 @@ class TwoServerTestCase(BaseTestCase):
 
         global _host, _port, _port2
         self.server1 = self.start_server(_host, _port)
-        logger.info('Started server at %s:%s', *(self.server1.address[:2]))
+        logger.info('Started server at %s:%s' % (_host, _port))
 
         self.server2 = self.start_server(_host, _port2,
                                          linked_servers=[(_host, _port)])
-        logger.info('Started server at %s:%s', *(self.server2.address[:2]))
+        logger.info('Started server at %s:%s' % (_host, _port2))
 
     def tearDown(self):
-        self.server1.stop(timeout=0)
-        logger.info('Stopped server at %s:%s', *(self.server1.address[:2]))
-        self.server2.stop(timeout=0)
-        logger.info('Stopped server at %s:%s', *(self.server2.address[:2]))
+        global _host, _port, _port2
+        self.server1.terminate()
+        ret = self.server1.wait()
+        logger.info('Stopped server at %s:%s (code %i)' % (_host, _port, ret))
+        self.server2.terminate()
+        ret = self.server2.wait()
+        logger.info('Stopped server at %s:%s (code %i)' % (_host, _port2, ret))
 
         super(TwoServerTestCase, self).tearDown()
 
@@ -141,12 +156,16 @@ class ThreeServerTestCase(BaseTestCase):
         self.server2 = self.start_server(_host, _port2,
                                          linked_servers=[(_host, _port)])
         self.server3 = self.start_server(_host, _port3,
-                                         linked_servers=[(_host, _port), (_host, _port2)])
+                                         linked_servers=[(_host, _port),
+                                                         (_host, _port2)])
 
     def tearDown(self):
-        self.server1.stop(timeout=0)
-        self.server2.stop(timeout=0)
-        self.server3.stop(timeout=0)
+        self.server1.terminate()
+        self.server1.wait()
+        self.server2.terminate()
+        self.server2.wait()
+        self.server3.terminate()
+        self.server3.wait()
 
         super(ThreeServerTestCase, self).tearDown()
 
@@ -270,7 +289,7 @@ class ClientRegistryTestCase(SingleServerTestCase):
         payload_text = reply.payload.decode('utf-8')
         payload = json.loads(payload_text)
 
-        self.assertCorrectClientListReply(obj, payload)
+        self.assert_correct_client_list_reply(obj, payload)
 
 class RecipientTestCase(SingleServerTestCase):
     def setUp(self):
@@ -346,14 +365,6 @@ class RecipientTestCase(SingleServerTestCase):
 
             self.assertIsNone(reply)
 
-    def assert_receives_object(self, sock, id):
-        reply = None
-        while reply is None or reply.event != None:
-            reply = read_object_with_timeout(sock, select=select)
-
-        self.assertIsNotNone(reply)
-        self.assertEquals(reply.id, id)
-
 
 class SPFRoutingTestCase(ThreeServerTestCase):
     def setUp(self):
@@ -364,22 +375,78 @@ class SPFRoutingTestCase(ThreeServerTestCase):
         # 3. clients on separate servers can talk to each other and get objects only once
 
     def server_statistics(self, host, port):
-        c = self.make_subscribe_client(host, port)
+        sock, routing_id = self.make_subscribe_client(host, port)
         req = BusinessObject({'event': 'server/statistics'}, None)
-        req.serialize(sock)
+        req.serialize(socket=sock)
         logger.debug(u"Sent statistics call: {0}".format(req.metadata))
-        reply, time = reply_for_object(req, self.sock, select=select)
+        reply, time = reply_for_object(req, sock, select=select)
+        sock.close()
         return json.loads(reply.payload.decode('utf-8'))
 
+        # {u'client count': 3, u'bytes in': 2263, u'average send queue length': 0.0, u'events by type': {u'routing/subscribe/reply': 2, u'server/statistics': 1, u'routing/subscribe': 3, u'routing/announcement/neighbors': 2, u'routing/subscribe/notify': 3}, u'clients connected total': 3, u'clients disconnected total': 0, u'objects by type': {u'': 11}, u'received objects': 11}
+
     def test_on_same_server(self):
-        global _host, _port
-        self.client1 = self.make_subscribe_client()
-        self.client2 = self.make_subscribe_client()
+        global _host, _port, _port2, _port3
+        client1 = self.make_subscribe_client()
+        client2 = self.make_subscribe_client()
+
+        o1 = BusinessObject({'type': 'text/foo', 'to': client2[1]}, None)
+        o1.serialize(socket=client1[0])
+
+        o2 = BusinessObject({'type': 'text/foo', 'to': client1[1]}, None)
+        o2.serialize(socket=client2[0])
+
+        self.assert_receives_object(client1[0], o2.id)
+        self.assert_receives_object(client2[0], o1.id)
+
+        stats = self.server_statistics(_host, _port2)
+        self.assertTrue('text/foo' not in stats['objects by type'])
+
+        client1[0].close()
+        client2[0].close()
+
+    def fetch_routing_state(self, socket):
+        event = 'routing/state/graph'
+        request = BusinessObject({'event': event}, None)
+        request.serialize(socket=socket)
+        reply, time = reply_for_object(request, socket, select=select)
+        return reply.payload
 
     def test_on_different_server(self):
-        global _host, _port2
-        self.client1 = self.make_subscribe_client()
-        self.client2 = self.make_subscribe_client(_host, _port2)
+        global _host, _port2, _port3
+
+        client1 = self.make_subscribe_client()
+        client2 = self.make_subscribe_client(_host, _port2)
+        # client3 = self.make_subscribe_client(_host, _port3)
+
+        sleep(1)
+        logger.info('Routing state: ' + self.fetch_routing_state(client1[0]))
+        logger.info(repr(client1) + repr(client2))
+
+        o1 = BusinessObject({'type': 'text/foo', 'to': client2[1]}, None)
+        o1.serialize(socket=client1[0])
+
+        o2 = BusinessObject({'type': 'text/foo', 'to': client1[1]}, None)
+        o2.serialize(socket=client2[0])
+
+        # o3 = BusinessObject({'type': 'text/foo', 'to': client2[1]}, None)
+        # o3.serialize(socket=client3[0])
+
+        # print(client1)
+        # print(client2)
+        # print(client3)
+
+        # self.assert_receives_object(client1[0], o2.id)
+        self.assert_receives_object(client1[0], o2.id)
+        self.assert_receives_object(client2[0], o1.id)
+        # self.assert_receives_object(client3[0], o2.id)
+
+        # stats = self.server_statistics(_host, _port3)
+        # self.assertTrue('text/foo' not in stats['objects by type'])
+
+        client1[0].close()
+        client2[0].close()
+        client3[0].close()
 
 
 def main():
@@ -404,7 +471,7 @@ def main():
     _port2 = opts.port2
     _port3 = opts.port3
 
-    unittest_main()
+    unittest_main(verbosity=2)
 
 if __name__ == '__main__':
     main()

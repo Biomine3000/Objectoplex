@@ -7,12 +7,12 @@ import json
 
 from datetime import datetime, timedelta
 from collections import defaultdict
-from uuid import uuid4
 from os import environ as env
-from random import choice
+from random import choice, randint
 
 from system import BusinessObject
 from server import SystemClient
+from spf import RoutingState
 
 logger = logging.getLogger('middleware')
 
@@ -189,13 +189,17 @@ def make_routing_id(registration_object=None):
                                 obj.metadata.get('unique-routing-id',
                                                  make_routing_id()))
 
-    return str(uuid4())
+    prefix = choice(('prof', 'pundit', 'free-radical',
+                     'principal-investigator'))
+    return '-'.join((prefix, str(randint(1, 10000))))
 
 
 class RoutingMiddleware(Middleware):
     def __init__(self):
         self.routing_id = make_routing_id() # routing id of the server
         self.last_announcement = datetime.now()
+        self.routing_state = RoutingState()
+        self.last_routing_status = datetime.now()
 
     def connect(self, client, clients):
         RoutedSystemClient.promote(client, None)
@@ -215,6 +219,7 @@ class RoutingMiddleware(Middleware):
             logger.info(u"Client {0} disconnected!".format(client))
 
         if client.subscribed:
+            # self.routing_state.handle_disconnect(client.routing_id)
             self.route(BusinessObject({ 'event': 'routing/disconnect',
                                         'routing-id': client.routing_id }, None), None, clients)
 
@@ -223,13 +228,42 @@ class RoutingMiddleware(Middleware):
 
         if obj.event == 'routing/subscribe' and RoutingMiddleware.is_server(obj):
             self.handle_server_subscription(obj, sender, clients)
+            self.routing_state.handle_subscription(self.routing_id, sender.routing_id)
         elif obj.event == 'routing/subscribe':
             self.handle_client_subscription(obj, sender, clients)
+            self.routing_state.handle_subscription(self.routing_id, sender.routing_id)
+        elif obj.event == 'routing/disconnect':
+            self.routing_state.handle_disconnect(obj.metadata['routing-id'])
+        elif obj.event == 'routing/announcement/neighbors':
+            origin = obj.metadata['route'][0]
+            logger.debug(u"Received routing announcement from {0}".format(origin))
+            self.routing_state.handle_announcement(origin, [n['routing-id']
+                                                            for n in obj.metadata['neighbors']])
+        elif obj.event == 'routing/state/graph':
+            logger.debug(u"Received routing state graph request from {0}".format(sender.routing_id))
+            bmgraph = self.routing_state.bmgraph()
+
+            metadata = {'event': 'routing/state/graph',
+                        'to': sender.routing_id,
+                        'in-reply-to': obj.id,
+                        'type': 'text/bmgraph',
+                        'size': len(bmgraph)}
+            state_object = BusinessObject(metadata, bytearray(bmgraph, encoding='utf-8'))
+            sender.send(state_object, None)
+            return None
         else:
             return self.route(obj, sender, clients)
 
     def periodical(self, clients):
         now = datetime.now()
+
+        # if now > self.last_routing_status + timedelta(seconds=15):
+        #     self.last_routing_status = now
+        #     from sys import stderr
+        #     from codecs import getwriter
+        #     out = getwriter('utf-8')(stderr)
+        #     print(self.routing_state.bmgraph(), file=out)
+
         if now > self.last_announcement + timedelta(minutes=5):
             self.last_announcement = now
             self.route(self.neighbor_announcement(clients), None, clients)
@@ -272,14 +306,18 @@ class RoutingMiddleware(Middleware):
                                   'routing-id': client.routing_id,
                                   'role': 'server' }, None)
 
-        for c in clients:
-            if c != client:
-                c.send(notify, None)
+        # for c in clients:
+        #     if c != client:
+        #         c.send(notify, None)
 
+        self.route(notify, None, clients)
         self.route(self.neighbor_announcement(clients), None, clients)
         logger.info(u"Server {0} subscribed!".format(client))
 
     def handle_client_subscription(self, obj, client, clients):
+        if 'routing_id' in obj.metadata:
+            client.routing_id = obj.metadata['routing_id']
+
         client.extra_routing_ids = RoutingMiddleware.extra_routing_ids(obj)
         client.receive_mode = obj.metadata.get('receive-mode', obj.metadata.get('receive_mode', 'none'))
         client.types = obj.metadata.get('types', 'all')
@@ -293,10 +331,11 @@ class RoutingMiddleware(Middleware):
                                      'routing-id': client.routing_id,
                                      'in-reply-to': obj.id }, None), None)
 
-        for c in clients:
-            if c != client:
-                c.send(notify, None)
+        # for c in clients:
+        #     if c != client:
+        #         c.send(notify, None)
 
+        self.route(notify, None, clients)
         self.route(self.neighbor_announcement(clients), None, clients)
         logger.info(u"Client {0} subscribed!".format(client))
 
@@ -326,26 +365,60 @@ class RoutingMiddleware(Middleware):
             logger.warning("Dropped {0}, {1} not subscribed!".format(obj, sender))
             return
 
+        # Ensure route is part of metadata
         if 'route' in obj.metadata:
             route = obj.metadata['route']
         else:
             route = []
             obj.metadata['route'] = route
 
+        # Drop cycling object
         if self.routing_id in route:
-            return False
+            return
 
         if len(route) == 0 and sender is not None:
             route.append(sender.routing_id)
         route.append(self.routing_id)
 
-        for recipient in clients:
-            # print('---')
-            # print(obj.metadata)
-            # print(self.should_route_to(obj, sender, recipient), recipient, recipient.routing_id)
-            # print('---')
-            if self.should_route_to(obj, sender, recipient)[0]:
-                recipient.send(obj, sender)
+        # Figure out path for this object
+        #  1. Is there a recipient for the object? 'to'-field?
+        #   - if there is a recipient, use shortest path to the destination
+        #   - otherwise calculate shortest paths for all known network members
+        to = set()
+        if 'to' in obj.metadata:
+            if isinstance(obj.metadata['to'], basestring):
+                to.add(obj.metadata['to'])
+            else:
+                to.update(obj.metadata['to'])
+        else:
+            to = set(self.routing_state.nodes())
+            to.discard(self.routing_id)
+            for routing_id in obj.metadata['route'][1:]:
+                to.discard(routing_id)
+
+        next_hops = set()
+        for node in to:
+            length, shortest_path = self.routing_state.shortest_path(self.routing_id, node)
+            if length is None and shortest_path is None:
+                logger.warning(self.routing_state.bmgraph())
+                logger.warning("No route to node %s!" % node)
+                continue
+            next_hop = shortest_path[0]
+            next_hops.add(next_hop)
+
+        for client in clients:
+            if client.routing_id in next_hops:
+                # print(self.should_route_to(obj, sender, client), client, client.routing_id)
+                if self.should_route_to(obj, sender, client)[0]:
+                    client.send(obj, sender)
+
+        # for recipient in clients:
+        #     # print('---')
+        #     # print(obj.metadata)
+        #     # print(self.should_route_to(obj, sender, recipient), recipient, recipient.routing_id)
+        #     # print('---')
+        #     if self.should_route_to(obj, sender, recipient)[0]:
+        #         recipient.send(obj, sender)
 
     def should_route_to(self, obj, sender, recipient):
         if not recipient.subscribed:
