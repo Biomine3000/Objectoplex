@@ -9,7 +9,7 @@ from optparse import OptionParser
 
 import gevent
 
-from objectoplex import ObjectoPlex
+from objectoplex.server import ObjectoPlex
 
 
 logger = logging.getLogger("simple-object-server")
