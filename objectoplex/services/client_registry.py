@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 import json
 
-from system import BusinessObject
-from service import Service
+from objectoplex import BusinessObject
+from objectoplex.services import Service
 
 
 class Client(object):

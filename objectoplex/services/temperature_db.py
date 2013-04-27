@@ -14,8 +14,8 @@ Base = declarative_base()
 from sqlalchemy import create_engine, Column, Integer, Float, String, DateTime
 from sqlalchemy.orm import sessionmaker
 
-from system import BusinessObject
-from service import Service
+from objectoplex import BusinessObject
+from objectoplex.services import Service
 
 
 def postgres_url(config):

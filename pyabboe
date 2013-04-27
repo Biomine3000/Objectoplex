@@ -9,8 +9,8 @@ from argparse import ArgumentParser
 
 import gevent
 
-from server import ObjectoPlex
-from middleware import *
+from objectoplex import ObjectoPlex
+from objectoplex.middleware import *
 
 logger = logging.getLogger("pyabboe")
 

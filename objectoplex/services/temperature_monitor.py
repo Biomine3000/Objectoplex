@@ -7,8 +7,8 @@ from gevent import Greenlet
 from gevent import sleep
 
 import service
-from system import BusinessObject
-from service import Service, timeout
+from objectoplex import BusinessObject
+from objectoplex.services import Service, timeout
 
 
 class Background(Greenlet):

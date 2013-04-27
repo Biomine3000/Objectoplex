@@ -9,10 +9,10 @@ from optparse import OptionParser
 
 import gevent
 
-from server import ObjectoPlex
+from objectoplex import ObjectoPlex
 
 
-logger = logging.getLogger("objectoplex")
+logger = logging.getLogger("simple-object-server")
 
 def main():
     parser = OptionParser()

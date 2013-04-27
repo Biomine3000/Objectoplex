@@ -24,3 +24,6 @@
    Customary testing host is *localhost* and port is *7890*.  These are the
    default ones for all the tools provided within the Objectoplex
    distribution.
+** Testing
+   - =export PYTHONPATH=.=
+   - =python objectoplex/tests.py=

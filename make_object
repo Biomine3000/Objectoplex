@@ -23,7 +23,7 @@ import io
 
 from optparse import OptionParser
 
-from system import BusinessObject
+from objectoplex import BusinessObject
 
 u8 = codecs.getwriter('utf-8')(sys.stdout)
 

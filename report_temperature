@@ -12,9 +12,7 @@ from optparse import OptionParser
 from os import environ as env
 from codecs import getwriter
 
-from system import BusinessObject
-from tv import subscription_object
-from utils import reply_for_object
+from objectoplex import BusinessObject, subscription_object, reply_for_object
 
 e8 = getwriter('utf-8')(stderr)
 

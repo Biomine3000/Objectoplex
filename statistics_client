@@ -12,7 +12,7 @@ from sys import stdout, stderr, exit
 from codecs import getwriter
 from datetime import datetime, timedelta
 
-from system import BusinessObject, InvalidObject
+from objectoplex import BusinessObject, InvalidObject
 
 logger = logging.getLogger('statistics_client')
 u8 = getwriter('utf-8')(stdout)

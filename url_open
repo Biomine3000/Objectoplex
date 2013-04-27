@@ -11,8 +11,7 @@ from os.path import getsize
 from optparse import OptionParser
 from os import environ as env
 
-from system import BusinessObject
-from tv import subscription_object
+from objectoplex import BusinessObject, subscription_object
 
 def main():
     parser = OptionParser()

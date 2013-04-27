@@ -14,12 +14,19 @@ from datetime import datetime, timedelta
 from os import environ as env
 from argparse import ArgumentParser
 
-from system import BusinessObject, InvalidObject
-from tv import subscription_object, registration_object, list_clients_object
-from tv import print_readably
+from objectoplex import BusinessObject, InvalidObject, subscription_object
+from objectoplex import registration_object, print_readably
 
 u8 = codecs.getwriter('utf-8')(sys.stdout)
 logger = logging.getLogger('raw_client')
+
+def list_clients_object():
+    metadata = {
+        'event': 'services/request',
+        'name': 'clients',
+        'request': 'list',
+        }
+    return BusinessObject(metadata, None)
 
 def show(obj, include_keys=set()):
     print_readably(obj, file=u8, include=include_keys)

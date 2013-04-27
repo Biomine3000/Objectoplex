@@ -16,7 +16,7 @@ from mimetypes import guess_type
 from time import sleep
 from os import environ as env
 
-from system import BusinessObject
+from objectoplex import BusinessObject
 
 logger = logging.getLogger('image_sender')
 

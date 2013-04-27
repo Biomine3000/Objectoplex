@@ -18,7 +18,7 @@ except ImportError, e:
     from Queue import Queue
     from time import sleep
 
-from system import BusinessObject, InvalidObject
+from objectoplex import BusinessObject, InvalidObject
 
 
 @contextmanager

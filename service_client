@@ -16,8 +16,7 @@ from codecs import getwriter
 from datetime import datetime, timedelta
 from mimetypes import guess_type
 
-from system import BusinessObject, InvalidObject
-from tv import print_readably
+from objectoplex import BusinessObject, InvalidObject, print_readably
 
 logger = logging.getLogger('service_client')
 u8 = getwriter('utf-8')(stdout)

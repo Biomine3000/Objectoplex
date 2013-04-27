@@ -2,8 +2,8 @@
 import urllib2
 from codecs import getreader
 
-from system import BusinessObject
-from service import Service, timeout
+from objectoplex import BusinessObject
+from objectoplex.services import Service, timeout
 
 
 class Oberst(Service):

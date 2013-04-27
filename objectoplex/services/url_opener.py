@@ -4,8 +4,8 @@ from os import environ as env
 
 from Tkinter import *
 
-from system import BusinessObject
-from service import Service
+from objectoplex import BusinessObject
+from objectoplex.services import Service
 
 class App(object):
     def __init__(self, master, command, url, timeout, logger):

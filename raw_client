@@ -11,7 +11,7 @@ import io
 
 from optparse import OptionParser
 
-from system import BusinessObject, InvalidObject
+from objectoplex import BusinessObject, InvalidObject
 
 u8 = codecs.getwriter('utf-8')(sys.stdout)
 logger = logging.getLogger('raw_client')
