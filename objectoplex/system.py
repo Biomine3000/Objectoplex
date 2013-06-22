@@ -26,6 +26,7 @@ def read_until_nul(socket):
 
 
 class InvalidObject(Exception): pass
+class CannotConvertToPython(Exception): pass
 
 
 class ObjectType(object):
@@ -167,6 +168,16 @@ class BusinessObject(object):
         else:
             return ret
 
+    def payload_as_python(self):
+        if self.content_type and \
+            (self.content_type.subtype == 'json' or
+             self.content_type.subtype == 'javascript'):
+            payload_string = self.payload.decode('utf-8')
+            return json.loads(payload_string)
+        else:
+            raise CannotConvertToPython("Type %s can't be transformed to Python." %
+                                          str(self.content_type))
+
     @classmethod
     def from_string(self, string):
         metadata_dict = {
@@ -174,6 +185,13 @@ class BusinessObject(object):
             'type': "text/plain; charset=UTF-8"
             }
         return BusinessObject(metadata_dict, bytearray(string, encoding='utf-8'))
+
+    @classmethod
+    def from_python(self, metadata, obj):
+        payload = json.dumps(obj)
+        metadata['size'] = len(payload)
+        metadata['type'] = "application/json"
+        return BusinessObject(metadata, bytearray(string, encoding='utf-8'))
 
     @classmethod
     def from_file(self, path):
