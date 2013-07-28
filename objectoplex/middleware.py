@@ -202,10 +202,12 @@ class RoutingMiddleware(Middleware):
         RoutedSystemClient.promote(client, None)
 
         if client.server:
-            self.subscribe_to_server(client)
+            self.subscribe_to_server(client, clients)
             logger.info(u"Server {0} connected!".format(client))
         else:
             logger.info(u"Client {0} connected!".format(client))
+
+        self.add_node(self.routing_id, client.routing_id)
 
     def disconnect(self, client, clients):
         assert(client.__class__ == RoutedSystemClient)
@@ -218,6 +220,21 @@ class RoutingMiddleware(Middleware):
         if client.subscribed:
             self.route(BusinessObject({ 'event': 'routing/disconnect',
                                         'routing-id': client.routing_id }, None), None, clients)
+            self.remove_node(client.routing_id)
+
+    def add_node(self, server, node):
+        if server not in self.neighbor_lists:
+            self.neighbor_lists[server] = set([node])
+        else:
+            self.neighbor_lists[server].add(node)
+
+    def remove_node(self, routing_id):
+        for value in self.neighbor_lists:
+            if routing_id in value:
+                value = set([i for i in value
+                             if i != routing_id])
+        if routing_id in self.neighbor_lists:
+            del self.neighbor_lists[routing_id]
 
     def handle(self, obj, sender, clients):
         assert(sender.__class__ == RoutedSystemClient)
@@ -241,12 +258,21 @@ class RoutingMiddleware(Middleware):
 
         if obj.event == 'routing/announcement/neighbors':
             self.handle_neighbor_announcement(obj, sender, clients)
+        elif obj.event == 'routing/subscribe/notification':
+            if 'route' in obj.metadata:
+                self.add_node(obj.metadata['routing-id'], obj.metadata['route'][0])
+            else:
+                self.add_node(obj.metadata['routing-id'], self.routing_id)
+            return self.route(obj, sender, clients)
+        elif obj.event == 'routing/disconnect':
+            self.remove_node(obj.metadata['routing-id'], obj.metadata['route'][0])
+            return self.route(obj, sender, clients)
         else:
             return self.route(obj, sender, clients)
 
     def handle_neighbor_announcement(self, obj, sender, clients):
         source_node = obj.metadata['node']
-        source_neighbors = [o['routing-id'] for o in obj.metadata['neighbors']]
+        source_neighbors = set([o['routing-id'] for o in obj.metadata['neighbors']])
         self.neighbor_lists[source_node] = source_neighbors
         self.route(obj, sender, clients)
 
@@ -266,13 +292,14 @@ class RoutingMiddleware(Middleware):
 
         return obj
 
-    def subscribe_to_server(self, client):
+    def subscribe_to_server(self, client, clients):
         if client.subscribed_to:
             return
         subscription = make_server_subscription(self.routing_id)
         client.send(subscription, None)
         client.subscribed_to = True
         logger.info(u"Subscribed to server {0}".format(client))
+        client.send(self.neighbor_announcement(clients), None)
 
     def handle_server_subscription(self, obj, client, clients):
         client.routing_id = obj.metadata['routing-id']
@@ -283,7 +310,7 @@ class RoutingMiddleware(Middleware):
         client.subscribed = True
         client.server = True
 
-        self.subscribe_to_server(client)
+        self.subscribe_to_server(client, clients)
 
         client.send(BusinessObject({ 'event': 'routing/subscribe/reply',
                                      'routing-id': client.routing_id,
@@ -363,10 +390,10 @@ class RoutingMiddleware(Middleware):
         route.append(self.routing_id)
 
         for recipient in clients:
-            # print('---')
-            # print(obj.metadata)
-            # print(self.should_route_to(obj, sender, recipient), recipient, recipient.routing_id)
-            # print('---')
+            print('---')
+            print(obj.metadata)
+            print(self.should_route_to(obj, sender, recipient), recipient, recipient.routing_id)
+            print('---')
             if self.should_route_to(obj, sender, recipient)[0]:
                 recipient.send(obj, sender)
 
@@ -386,7 +413,10 @@ class RoutingMiddleware(Middleware):
                     return False, 'routing/* and sender.routing_id in route'
 
         if recipient.server:
-            return True, 'recipient is server'
+            if self.belongs_to_minimum_spanning_tree(recipient):
+                return True, 'recipient is server and belongs to the MST'
+            else:
+                return False, 'recipient is server and doesn\'t belong to the MST'
 
         if obj.metadata.get('event', '').startswith('routing/announcement/'):
             return False, 'not routing routing announcements to non-servers'
@@ -434,6 +464,81 @@ class RoutingMiddleware(Middleware):
                 reason.append("types is all")
 
         return should, '; '.join(reason)
+
+    def belongs_to_minimum_spanning_tree(self, neighbor):
+        all_edges = set()
+        all_nodes = set()
+
+        for node in self.neighbor_lists.keys():
+            all_nodes.add(node)
+            for neighbor in self.neighbor_lists[node]:
+                all_edges.add((node, neighbor))
+                all_nodes.add(neighbor)
+
+        reverse_sorted_edges = sorted(all_edges, reverse=True)
+
+        edge_weights = {}
+        for index, edge in enumerate(reverse_sorted_edges):
+            edge_weights[edge] = float(index + 1) / float(len(all_edges) + 1)
+
+        print('Weights')
+        print(edge_weights)
+
+        # Alphabetically first
+        current = self.routing_id
+
+        mst_nodes = set([current])
+        mst_edges = set()
+
+        def next_edge(current):
+            candidates = set()
+
+            for edge in all_edges:
+                for node in mst_nodes:
+                    if edge[0] == current and edge[1] not in mst_nodes:
+                        candidates.add(edge)
+                    elif edge[1] == current and edge[0] not in mst_nodes:
+                        candidates.add(edge)
+
+            if len(candidates) == 0:
+                return None
+            
+            min = sorted(candidates)[0]
+            for candidate in candidates:
+                if edge_weights[candidate] < edge_weights[min]:
+                    min = candidate
+
+            return min
+
+        while True:
+            edge = next_edge(current)
+
+            if edge is None:
+                break
+            
+            mst_edges.add(edge)
+
+            if current == edge[0]:
+                mst_nodes.add(edge[1])
+                current = edge[1]
+            elif current == edge[1]:
+                mst_nodes.add(edge[0])
+                current = edge[0]
+            else:
+                error
+
+        print("MST")
+        print(mst_edges)
+
+        for edge in mst_edges:
+            print(edge)
+            print(self.routing_id)
+            print(neighbor)
+            if self.routing_id in edge and neighbor in edge:
+                return True
+
+
+        return False
 
 
 class MOTDMiddleware(Middleware):
