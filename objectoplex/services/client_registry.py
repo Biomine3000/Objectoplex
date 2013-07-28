@@ -117,7 +117,7 @@ class ClientRegistry(Service):
         self.remove_client(obj)
 
     def handle(self, obj):
-        if obj.event == 'routing/subscribe/notify':
+        if obj.event == 'routing/subscribe/notification':
             return self.handle_subscribe(obj)
         elif obj.event == 'routing/disconnect':
             return self.handle_disconnect(obj)
@@ -135,7 +135,7 @@ class ClientRegistry(Service):
             return self.handle_list(obj)
 
     def should_handle(self, obj):
-        if obj.event == 'routing/subscribe/notify' or \
+        if obj.event == 'routing/subscribe/notification' or \
            obj.event == 'routing/disconnect':
             return True
         elif obj.event == 'services/request' and \
@@ -143,7 +143,7 @@ class ClientRegistry(Service):
             return True
 
         return False
-                      
+
 
 service = ClientRegistry
 

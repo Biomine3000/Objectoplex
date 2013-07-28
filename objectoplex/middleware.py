@@ -268,13 +268,13 @@ class RoutingMiddleware(Middleware):
                                      'in-reply-to': obj.id,
                                      'role': 'server' }, None), None)
 
-        notify = BusinessObject({ 'event': 'routing/subscribe/notify',
+        notification = BusinessObject({ 'event': 'routing/subscribe/notification',
                                   'routing-id': client.routing_id,
                                   'role': 'server' }, None)
 
         for c in clients:
             if c != client:
-                c.send(notify, None)
+                c.send(notification, None)
 
         self.route(self.neighbor_announcement(clients), None, clients)
         logger.info(u"Server {0} subscribed!".format(client))
@@ -286,7 +286,7 @@ class RoutingMiddleware(Middleware):
         client.server = False
         client.subscribed = True
 
-        notify = BusinessObject({ 'event': 'routing/subscribe/notify',
+        notification = BusinessObject({ 'event': 'routing/subscribe/notification',
                                   'routing-id': client.routing_id }, None)
         # Send a registration reply
         client.send(BusinessObject({ 'event': 'routing/subscribe/reply',
@@ -295,7 +295,7 @@ class RoutingMiddleware(Middleware):
 
         for c in clients:
             if c != client:
-                c.send(notify, None)
+                c.send(notification, None)
 
         self.route(self.neighbor_announcement(clients), None, clients)
         logger.info(u"Client {0} subscribed!".format(client))
@@ -456,11 +456,11 @@ class LegacySubscriptionMiddleware(Middleware):
             client.send(BusinessObject({ 'event': 'clients/register/reply',
                                          'routing-id': sender.routing_id }, None), None)
 
-        notify = BusinessObject({ 'event': 'routing/subscribe/notify',
+        notification = BusinessObject({ 'event': 'routing/subscribe/notification',
                                   'routing-id': client.routing_id }, None)
         for c in clients:
             if c != client:
-                c.send(notify, None)
+                c.send(notification, None)
 
         return BusinessObject({ 'event': 'services/request',
                                 'name': 'clients',
