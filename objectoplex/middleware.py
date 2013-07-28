@@ -196,6 +196,7 @@ class RoutingMiddleware(Middleware):
     def __init__(self):
         self.routing_id = make_routing_id() # routing id of the server
         self.last_announcement = datetime.now()
+        self.neighbor_lists = {}
 
     def connect(self, client, clients):
         RoutedSystemClient.promote(client, None)
@@ -221,12 +222,33 @@ class RoutingMiddleware(Middleware):
     def handle(self, obj, sender, clients):
         assert(sender.__class__ == RoutedSystemClient)
 
+        if obj.event and obj.event.startswith('routing/'):
+            return self.handle_routing(obj, sender, clients)
+
+        if sender is not None and not sender.subscribed:
+            return RoutingMiddleware.not_subscribed(obj, sender)
+        else:
+            return self.route(obj, sender, clients)
+
+    def handle_routing(self, obj, sender, clients):
         if obj.event == 'routing/subscribe' and RoutingMiddleware.is_server(obj):
             self.handle_server_subscription(obj, sender, clients)
         elif obj.event == 'routing/subscribe':
             self.handle_client_subscription(obj, sender, clients)
+
+        if sender is not None and not sender.subscribed:
+            return RoutingMiddleware.not_subscribed(obj, sender)
+
+        if obj.event == 'routing/announcement/neighbors':
+            self.handle_neighbor_announcement(obj, sender, clients)
         else:
             return self.route(obj, sender, clients)
+
+    def handle_neighbor_announcement(self, obj, sender, clients):
+        source_node = obj.metadata['node']
+        source_neighbors = [o['routing-id'] for o in obj.metadata['neighbors']]
+        self.neighbor_lists[source_node] = source_neighbors
+        self.route(obj, sender, clients)
 
     def periodical(self, clients):
         now = datetime.now()
@@ -321,11 +343,12 @@ class RoutingMiddleware(Middleware):
                     extra_routing_ids.append(routing_id)
         return extra_routing_ids
 
-    def route(self, obj, sender, clients):
-        if sender is not None and not sender.subscribed:
-            logger.warning("Dropped {0}, {1} not subscribed!".format(obj, sender))
-            return
+    @classmethod
+    def not_subscribed(cls, obj, sender):
+        logger.warning("Dropped {0}, {1} not subscribed!".format(obj, sender))
+        return None
 
+    def route(self, obj, sender, clients):
         if 'route' in obj.metadata:
             route = obj.metadata['route']
         else:
