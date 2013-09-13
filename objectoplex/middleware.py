@@ -14,6 +14,8 @@ from random import choice
 from system import BusinessObject
 from server import SystemClient
 
+from mst import minimum_spanning_tree
+
 logger = logging.getLogger('middleware')
 
 
