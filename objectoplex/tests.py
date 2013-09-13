@@ -25,6 +25,8 @@ from middleware import *
 from services.client_registry import ClientRegistry
 from utils import reply_for_object, read_object_with_timeout
 
+from mst_tests import *
+
 logger = logging.getLogger("tests")
 
 
