@@ -466,77 +466,19 @@ class RoutingMiddleware(Middleware):
         return should, '; '.join(reason)
 
     def belongs_to_minimum_spanning_tree(self, neighbor):
-        all_edges = set()
-        all_nodes = set()
+        graph = {}
 
         for node in self.neighbor_lists.keys():
-            all_nodes.add(node)
             for neighbor in self.neighbor_lists[node]:
-                all_edges.add((node, neighbor))
-                all_nodes.add(neighbor)
+                a, b = sorted([node, neighbor])
+                graph[(a, b)] = 1.0
 
-        reverse_sorted_edges = sorted(all_edges, reverse=True)
+        tree = minimum_spanning_tree(graph)
 
-        edge_weights = {}
-        for index, edge in enumerate(reverse_sorted_edges):
-            edge_weights[edge] = float(index + 1) / float(len(all_edges) + 1)
-
-        print('Weights')
-        print(edge_weights)
-
-        # Alphabetically first
-        current = self.routing_id
-
-        mst_nodes = set([current])
-        mst_edges = set()
-
-        def next_edge(current):
-            candidates = set()
-
-            for edge in all_edges:
-                for node in mst_nodes:
-                    if edge[0] == current and edge[1] not in mst_nodes:
-                        candidates.add(edge)
-                    elif edge[1] == current and edge[0] not in mst_nodes:
-                        candidates.add(edge)
-
-            if len(candidates) == 0:
-                return None
-            
-            min = sorted(candidates)[0]
-            for candidate in candidates:
-                if edge_weights[candidate] < edge_weights[min]:
-                    min = candidate
-
-            return min
-
-        while True:
-            edge = next_edge(current)
-
-            if edge is None:
-                break
-            
-            mst_edges.add(edge)
-
-            if current == edge[0]:
-                mst_nodes.add(edge[1])
-                current = edge[1]
-            elif current == edge[1]:
-                mst_nodes.add(edge[0])
-                current = edge[0]
-            else:
-                error
-
-        print("MST")
-        print(mst_edges)
-
-        for edge in mst_edges:
-            print(edge)
-            print(self.routing_id)
-            print(neighbor)
-            if self.routing_id in edge and neighbor in edge:
+        a, b = sorted([self.routing_id, neighbor])
+        for edge in tree:
+            if (a, b) == edge:
                 return True
-
 
         return False
 
