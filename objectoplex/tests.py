@@ -353,8 +353,23 @@ class RecipientTwoServerTestCase(TwoServerTestCase, RecipientBaseTestCase):
 
         super(RecipientTwoServerTestCase, self).tearDown()
 
-    def test_server_delivers_to_multiple_recipients(self):
-        pass
+    def test_clients_on_same_server_receive(self):
+        client, routing_id = self.clients[0]
+        to_client, to_routing_id = self.clients[1]
+
+        obj = BusinessObject({'to': to_routing_id}, None)
+        obj.serialize(socket=client)
+
+        self.assert_receives_object(to_client, obj.id)
+
+    def test_clients_on_other_server_receive(self):
+        client, routing_id = self.clients[0]
+        to_client, to_routing_id = self.clients[2]
+
+        obj = BusinessObject({'to': to_routing_id}, None)
+        obj.serialize(socket=client)
+
+        self.assert_receives_object(to_client, obj.id)
 
     def make_subscribe_client(self, server, no_echo=False):
         host, port = server.address[:2]
