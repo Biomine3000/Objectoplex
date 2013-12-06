@@ -97,8 +97,10 @@ class TwoServerTestCase(BaseTestCase):
         logger.info('Started server at %s:%s', *(self.server2.address[:2]))
 
     def tearDown(self):
-        self.server.stop(timeout=0)
-        logger.info('Stopped server at %s:%s', *(self.server.address[:2]))
+        self.server1.stop(timeout=0)
+        logger.info('Stopped server at %s:%s', *(self.server1.address[:2]))
+        self.server2.stop(timeout=0)
+        logger.info('Stopped server at %s:%s', *(self.server2.address[:2]))
 
         super(TwoServerTestCase, self).tearDown()
 
@@ -225,7 +227,31 @@ class ClientRegistryTestCase(SingleServerTestCase):
 
         self.assertCorrectClientListReply(obj, payload)
 
-class RecipientTestCase(SingleServerTestCase):
+
+class RecipientBaseTestCase(object):
+    def assert_receives_object(self, sock, id):
+        reply = None
+        while reply is None or reply.event != None:
+            reply = read_object_with_timeout(sock, select=select)
+
+        self.assertIsNotNone(reply)
+        self.assertEquals(reply.id, id)
+
+
+    def make_send_subscription(self, sock, no_echo=False):
+        metadata = {'event': 'routing/subscribe',
+                    'receive-mode': 'all',
+                    'types': 'all'}
+
+        if no_echo:
+            metadata['receive-mode'] = 'no_echo'
+
+        obj = BusinessObject(metadata, None)
+        obj.serialize(socket=sock)
+        return obj
+
+
+class RecipientTestCase(SingleServerTestCase, RecipientBaseTestCase):
     def setUp(self):
         super(RecipientTestCase, self).setUp()
         self.clients = []
@@ -299,14 +325,6 @@ class RecipientTestCase(SingleServerTestCase):
 
             self.assertIsNone(reply)
 
-    def assert_receives_object(self, sock, id):
-        reply = None
-        while reply is None or reply.event != None:
-            reply = read_object_with_timeout(sock, select=select)
-
-        self.assertIsNotNone(reply)
-        self.assertEquals(reply.id, id)
-
     def make_subscribe_client(self, no_echo=False):
         global _host, _port
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -318,21 +336,40 @@ class RecipientTestCase(SingleServerTestCase):
 
         return sock, routing_id
 
-    def make_send_subscription(self, sock, no_echo=False):
-        metadata = {'event': 'routing/subscribe',
-                    'receive-mode': 'all',
-                    'types': 'all'}
 
-        if no_echo:
-            metadata['receive-mode'] = 'no_echo'
+class RecipientTwoServerTestCase(TwoServerTestCase, RecipientBaseTestCase):
+    def setUp(self):
+        super(RecipientTwoServerTestCase, self).setUp()
+        self.clients = []
 
-        obj = BusinessObject(metadata, None)
-        obj.serialize(socket=sock)
-        return obj
+        self.clients.append(self.make_subscribe_client(self.server1))
+        self.clients.append(self.make_subscribe_client(self.server1))
+        self.clients.append(self.make_subscribe_client(self.server2))
+        self.clients.append(self.make_subscribe_client(self.server2))
+
+    def tearDown(self):
+        for sock, routing_id in self.clients:
+            sock.close()
+
+        super(RecipientTwoServerTestCase, self).tearDown()
+
+    def test_server_delivers_to_multiple_recipients(self):
+        pass
+
+    def make_subscribe_client(self, server, no_echo=False):
+        host, port = server.address[:2]
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect((host, port))
+
+        subscription = self.make_send_subscription(sock, no_echo=no_echo)
+        resp, time = reply_for_object(subscription, sock, select=select)
+        routing_id = resp.metadata['routing-id']
+
+        return sock, routing_id
 
 
 def main():
-    global _host, _port
+    global _host, _port, _port2
     parser = OptionParser()
     parser.add_option("-d", "--debug", action="store_true", dest="debug", default=False,
                       help="logging level DEBUG")
