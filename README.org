@@ -14,8 +14,8 @@
    | Command        | Purpose                                                  | Notes |
    |----------------+----------------------------------------------------------+-------|
    | pyabboe        | ABBOE functionality providing server capable of routing  |       |
-   | tv_client      | Simple text client that displays text messages on screen |       |
-   | service_client | Handy text client for making service calls               |       |
+   | tv\_client     | Simple text client that displays text messages on screen |       |
+   | service\_client | Handy text client for making service calls               |       |
    | service        | Service runner helper script                             |       |
    | image_sender   | Script for sending images, also useful for testing       |       |
 
