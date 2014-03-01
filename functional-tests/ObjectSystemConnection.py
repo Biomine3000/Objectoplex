@@ -12,7 +12,7 @@ from robot.api import logger
 
 __all__ = ["ObjectSystemConnection"]
 
-TIMEOUT = 5
+TIMEOUT = 1
 
 
 class ObjectSystemConnection(object):
@@ -24,6 +24,7 @@ class ObjectSystemConnection(object):
         self.sock.connect((host, int(port)))
 
     def send_object(self, obj):
+        logger.info("Sending object: " + str(obj.metadata))
         obj.serialize(self.sock)
 
     def receive_reply_for(self, obj):
@@ -41,7 +42,17 @@ class ObjectSystemConnection(object):
                 logger.info("Received " + str(incoming))
             if incoming is not None and incoming.id == obj.id:
                 return
-        raise Exception("Didn't receive expected object " + str(obj.metadata))
+        raise Exception("Didn't receive expected object: " + str(obj.metadata))
+
+    def should_not_receive_object(self, obj):
+        for i in xrange(TIMEOUT):
+            incoming = read_object_with_timeout(self.sock, timeout_secs=1.0)
+            if incoming is not None:
+                logger.info("Received " + str(incoming.metadata))
+            else:
+                logger.info("Received " + str(incoming))
+            if incoming is not None and incoming.id == obj.id:
+                raise Exception("Unexpectedly received object: " + str(obj.metadata))
 
     def disconnect_from_server(self):
         self.sock.close()

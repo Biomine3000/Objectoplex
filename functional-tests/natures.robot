@@ -14,18 +14,55 @@ Subscription Without Natures
     ${reply}=            Receive Reply For    ${subscription}
 
 Subscription With Natures
-    ${first}=            Create List    foo          bar
-    ${second}=           Create List    spam         ham
-    ${subscription}=     Make Subscription Object    ${first}       ${second}
+    ${natures}=            Set Natures    foo&bar|baz
+    ${subscription}=     Make Subscription Object    ${natures}
     Send Object          ${subscription}
     ${reply}=            Receive Reply For    ${subscription}
 
+
+# Single nature
 Receive Object With Requested Nature
-    ${natures}=               Create List    foo
+    ${natures}=               Set Natures    foo
     Subscribe With Natures    ${natures}
     ${obj}=                   Make Object With Natures    ${natures}
-    Send Object               ${obj}	
-    Should Receive Object            ${obj}
+    Send Object               ${obj}
+    Should Receive Object     ${obj}
+
+Shouldn't Receive Object Without Requested Nature
+    ${natures}=                   Set Natures    foo
+    ${obj_natures}=               Set Natures    bar
+    Subscribe With Natures        ${natures}
+    ${obj}=                       Make Object With Natures    ${obj_natures}
+    Send Object                   ${obj}
+    Should Not Receive Object     ${obj}
+
+
+# Multiple natures
+Receive Object With Multiple Requested Natures
+    ${natures}=               Set Natures    foo&bar
+    Subscribe With Natures    ${natures}
+    ${obj}=                   Make Object With Natures    ${natures}
+    Send Object               ${obj}
+    Should Receive Object     ${obj}
+
+Shouldn't Receive Object Without Multiple Requested Natures
+    ${natures}=                   Set Natures    foo&bar
+    ${obj_natures}=               Set Natures    spam&ham
+    Subscribe With Natures        ${natures}
+    ${obj}=                       Make Object With Natures    ${obj_natures}
+    Send Object                   ${obj}
+    Should Not Receive Object     ${obj}
+
+
+# Subsets
+Should Receive Object With Subset Of Requested Natures
+    ${natures}=               Set Natures    foo&bar&baz
+    ${obj_natures}=           Set Natures    foo&bar
+    Subscribe With Natures    ${natures}
+    ${obj}=                   Make Object With Natures    ${obj_natures}
+    Send Object               ${obj}
+    Should Receive Object     ${obj}
+
 
 *** Keywords ***
 Connect To Default Server
