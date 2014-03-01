@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+from uuid import uuid4
+
 from objectoplex import BusinessObject
 from objectoplex import subscription_object, reply_for_object
 
@@ -10,6 +12,7 @@ __all__ = ["make_subscription_object",
            "make_ping_object",
            "object_should_have_key",
            "object_should_have_key_with_value"]
+
 
 def make_subscription_object(natures=[]):
     result = subscription_object(natures)

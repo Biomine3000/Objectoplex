@@ -9,11 +9,13 @@ Test Teardown    Disconnect From Default Server
 
 *** Test Cases ***
 Subscription Without Natures
+    [Tags]    server    natures
     ${subscription}=     Make Subscription Object
     Send Object          ${subscription}
     ${reply}=            Receive Reply For    ${subscription}
 
 Subscription With Natures
+    [Tags]    server    natures
     ${natures}=          Set Natures    foo&bar|baz
     ${subscription}=     Make Subscription Object    ${natures}
     Send Object          ${subscription}
@@ -22,6 +24,7 @@ Subscription With Natures
 
 # Single nature
 Receive Object With Requested Nature
+    [Tags]    server    natures
     ${natures}=               Set Natures    foo
     Subscribe With Natures    ${natures}
     ${obj}=                   Make Object With Natures    ${natures}
@@ -29,6 +32,7 @@ Receive Object With Requested Nature
     Should Receive Object     ${obj}
 
 Shouldn't Receive Object Without Requested Nature
+    [Tags]    server    natures
     ${natures}=                   Set Natures    foo
     ${obj_natures}=               Set Natures    bar
     Subscribe With Natures        ${natures}
@@ -39,6 +43,7 @@ Shouldn't Receive Object Without Requested Nature
 
 # Multiple natures
 Receive Object With Multiple Requested Natures
+    [Tags]    server    natures
     ${natures}=               Set Natures    foo&bar
     Subscribe With Natures    ${natures}
     ${obj}=                   Make Object With Natures    ${natures}
@@ -46,6 +51,7 @@ Receive Object With Multiple Requested Natures
     Should Receive Object     ${obj}
 
 Shouldn't Receive Object Without Multiple Requested Natures
+    [Tags]    server    natures
     ${natures}=                   Set Natures    foo&bar
     ${obj_natures}=               Set Natures    spam&ham
     Subscribe With Natures        ${natures}
@@ -56,6 +62,7 @@ Shouldn't Receive Object Without Multiple Requested Natures
 
 # Subsets
 Should Receive Object With Subset Of Requested Natures
+    [Tags]    server    natures
     ${natures}=               Set Natures    foo&bar
     ${obj_natures}=           Set Natures    foo&bar&baz
     Subscribe With Natures    ${natures}
@@ -65,6 +72,7 @@ Should Receive Object With Subset Of Requested Natures
 
 # Or
 Should Receive When One Nature Set Matches
+    [Tags]    server    natures
     ${natures}=               Set Natures    foo&bar|spam&ham|xyz&abc
     ${obj_natures}=           Set Natures    foo&bar
     Subscribe With Natures    ${natures}
@@ -73,6 +81,7 @@ Should Receive When One Nature Set Matches
     Should Receive Object     ${obj}
 
 Should Receive When Multiple Nature Sets Match
+    [Tags]    server    natures
     ${natures}=               Set Natures    foo&bar|spam&ham|xyz&abc
     ${obj_natures}=           Set Natures    xyz&foo&abc&bar
     Subscribe With Natures    ${natures}
@@ -81,6 +90,7 @@ Should Receive When Multiple Nature Sets Match
     Should Receive Object     ${obj}
 
 Should Treat Distinct Sets Correctly
+    [Tags]    server    natures
     ${natures}=                  Set Natures    foo&bar|xyz&abc
     ${obj_natures}=              Set Natures    foo&abc
     Subscribe With Natures       ${natures}

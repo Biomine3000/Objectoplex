@@ -26,3 +26,7 @@
    distribution.
 ** Testing
    - ~PYTHONPATH=. python objectoplex/tests.py~
+   - ~pybot functional-tests~
+   - ~pybot -e services functional-tests~
+   - ~pybot -i server functional-tests~
+   - ~pybot -e client_registry functional-tests~

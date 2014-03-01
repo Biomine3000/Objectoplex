@@ -33,6 +33,9 @@ class ObjectSystemConnection(object):
             raise Exception("Didn't receive reply for object")
         return reply
 
+    def should_receive_reply_for(self, obj):
+        return self.receive_reply_for(obj)
+
     def should_not_receive_reply_for(self, obj):
         for i in xrange(TIMEOUT):
             reply, _ = reply_for_object(obj, self.sock, timeout_secs=1.0)
