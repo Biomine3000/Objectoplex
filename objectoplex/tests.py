@@ -153,6 +153,96 @@ class SubscriptionTestCase(SingleServerTestCase):
                                        self.sock, timeout_secs=0.01, select=select)
         self.assertValidReceiveAllReply(reply)
 
+
+class NaturesTestCase(SingleServerTestCase):
+    def setUp(self):
+        super(NaturesTestCase, self).setUp()
+
+        global _host, _port
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.connect((_host, _port))
+
+    def tearDown(self):
+        self.sock.close()
+
+        super(NaturesTestCase, self).tearDown()
+
+    def make_send_subscription(self, natures=None):
+        obj = BusinessObject({'event': 'routing/subscribe',
+                              'receive-mode': 'all',
+                              'types': 'all'}, None)
+
+        if natures is not None:
+            obj.metadata['natures'] = natures
+
+        obj.serialize(socket=self.sock)
+        return obj
+
+    def test_should_receive_none_for_natures_when_not_specified(self):
+        reply, time = reply_for_object(self.make_send_subscription(),
+                                       self.sock, select=select)
+        self.assertIn('natures', reply.metadata)
+
+    def test_should_receive_given_natures_when_natures_specified(self):
+        zombie = ['zombie', 'call']
+        irc = ['irc', 'message']
+
+        reply, time = reply_for_object(self.make_send_subscription([zombie, irc]),
+                                       self.sock, select=select)
+
+        self.assertIn('natures', reply.metadata)
+
+        natures_list = reply.metadata['natures']
+        sets = []
+        for n in natures_list:
+            sets.append(set(n))
+
+        self.assertIn(sets, set(irc))
+        self.assertIn(sets, set(zombie))
+
+    def test_should_not_receive_objects_without_specified_nature(self):
+        reply, time = reply_for_object(self.make_send_subscription(natures=[['foo']]),
+                                       self.sock, select=select)
+
+        obj = BusinessObject({'nature': ['bar']}, None)
+        obj.serialize(socket=self.sock)
+
+        reply, time = reply_for_object(obj, self.sock, select=select)
+        self.assertIsNone(reply)
+
+    def test_should_receive_object_with_specified_nature(self):
+        reply, time = reply_for_object(self.make_send_subscription(natures=[['foo']]),
+                                       self.sock, select=select)
+
+        obj = BusinessObject({'nature': ['foo']}, None)
+        obj.serialize(socket=self.sock)
+
+        reply, time = reply_for_object(obj, self.sock, select=select)
+        self.assertIsNotNone(reply)
+        self.assertEquals(reply.id, obj.id)
+
+    def test_should_handle_multiple_nature_sets(self):
+        reply, time = reply_for_object(self.make_send_subscription(natures=[['foo', 'bar'], ['baz', 'ham']]),
+                                       self.sock, select=select)
+
+        obj = BusinessObject({'nature': ['bar', 'foo']}, None)
+        obj.serialize(socket=self.sock)
+        reply, time = reply_for_object(obj, self.sock, select=select)
+        self.assertIsNotNone(reply)
+        self.assertEquals(reply.id, obj.id)
+
+        obj = BusinessObject({'nature': ['baz', 'ham']}, None)
+        obj.serialize(socket=self.sock)
+        reply, time = reply_for_object(obj, self.sock, select=select)
+        self.assertIsNotNone(reply)
+        self.assertEquals(reply.id, obj.id)
+
+        obj = BusinessObject({'nature': ['foo', 'baz']}, None)
+        obj.serialize(socket=self.sock)
+        reply, time = reply_for_object(obj, self.sock, select=select)
+        self.assertIsNone(reply)
+
+
 class PingPongTestCase(SubscriptionTestCase):
     def test_server_responds_to_ping_after_subscription(self):
         self.make_send_subscription()
