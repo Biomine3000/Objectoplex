@@ -425,7 +425,7 @@ class RoutingMiddleware(Middleware):
                 object_natures = set(obj.metadata.get('natures', []))
                 for recipient_natures in natures:
                     # import pdb; pdb.set_trace()
-                    if object_natures.issubset(recipient_natures):
+                    if recipient_natures.issubset(object_natures):
                         part_of_a_set = True
                         break
                 if not part_of_a_set:

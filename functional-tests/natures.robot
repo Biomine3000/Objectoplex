@@ -56,8 +56,8 @@ Shouldn't Receive Object Without Multiple Requested Natures
 
 # Subsets
 Should Receive Object With Subset Of Requested Natures
-    ${natures}=               Set Natures    foo&bar&baz
-    ${obj_natures}=           Set Natures    foo&bar
+    ${natures}=               Set Natures    foo&bar
+    ${obj_natures}=           Set Natures    foo&bar&baz
     Subscribe With Natures    ${natures}
     ${obj}=                   Make Object With Natures    ${obj_natures}
     Send Object               ${obj}
@@ -74,11 +74,19 @@ Should Receive When One Nature Set Matches
 
 Should Receive When Multiple Nature Sets Match
     ${natures}=               Set Natures    foo&bar|spam&ham|xyz&abc
-    ${obj_natures}=           Set Natures    foo&bar&xyz&abc
+    ${obj_natures}=           Set Natures    xyz&foo&abc&bar
     Subscribe With Natures    ${natures}
     ${obj}=                   Make Object With Natures    ${obj_natures}
     Send Object               ${obj}
     Should Receive Object     ${obj}
+
+Should Treat Distinct Sets Correctly
+    ${natures}=                  Set Natures    foo&bar|xyz&abc
+    ${obj_natures}=              Set Natures    foo&abc
+    Subscribe With Natures       ${natures}
+    ${obj}=                      Make Object With Natures    ${obj_natures}
+    Send Object                  ${obj}
+    Should Not Receive Object    ${obj}
 
 
 *** Keywords ***
