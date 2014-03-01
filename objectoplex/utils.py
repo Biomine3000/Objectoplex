@@ -66,11 +66,12 @@ def registration_object(client_name, user_name):
         }
     return BusinessObject(metadata, None)
 
-def subscription_object():
+def subscription_object(natures=[]):
     metadata = {
         'event': 'routing/subscribe',
         'receive-mode': 'all',
         'types': 'all',
+        'natures': natures
         }
     return BusinessObject(metadata, None)
 
