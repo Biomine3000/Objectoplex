@@ -1,6 +1,6 @@
 *** Settings ***
 Resource    single_server.robot
-Library     subscriptions.py
+Library     common.py
 Library     ObjectSystemConnection.py
 
 Test Setup       Connect To Default Server
@@ -20,6 +20,12 @@ Subscription With Natures
     Send Object          ${subscription}
     ${reply}=            Receive Reply For    ${subscription}
 
+Receive Object With Requested Nature
+    ${natures}=               Create List    foo
+    Subscribe With Natures    ${natures}
+    ${obj}=                   Make Object With Natures    ${natures}
+    Send Object               ${obj}	
+    Should Receive Object            ${obj}
 
 *** Keywords ***
 Connect To Default Server
@@ -27,3 +33,9 @@ Connect To Default Server
 
 Disconnect From Default Server
     Disconnect From Server
+
+Subscribe With Natures
+    [Arguments]    ${natures}
+    ${subscription}=     Make Subscription Object    ${natures}
+    Send Object          ${subscription}
+    ${reply}=            Receive Reply For    ${subscription}
