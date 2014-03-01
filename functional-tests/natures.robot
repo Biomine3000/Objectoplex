@@ -14,7 +14,7 @@ Subscription Without Natures
     ${reply}=            Receive Reply For    ${subscription}
 
 Subscription With Natures
-    ${natures}=            Set Natures    foo&bar|baz
+    ${natures}=          Set Natures    foo&bar|baz
     ${subscription}=     Make Subscription Object    ${natures}
     Send Object          ${subscription}
     ${reply}=            Receive Reply For    ${subscription}
@@ -58,6 +58,23 @@ Shouldn't Receive Object Without Multiple Requested Natures
 Should Receive Object With Subset Of Requested Natures
     ${natures}=               Set Natures    foo&bar&baz
     ${obj_natures}=           Set Natures    foo&bar
+    Subscribe With Natures    ${natures}
+    ${obj}=                   Make Object With Natures    ${obj_natures}
+    Send Object               ${obj}
+    Should Receive Object     ${obj}
+
+# Or
+Should Receive When One Nature Set Matches
+    ${natures}=               Set Natures    foo&bar|spam&ham|xyz&abc
+    ${obj_natures}=           Set Natures    foo&bar
+    Subscribe With Natures    ${natures}
+    ${obj}=                   Make Object With Natures    ${obj_natures}
+    Send Object               ${obj}
+    Should Receive Object     ${obj}
+
+Should Receive When Multiple Nature Sets Match
+    ${natures}=               Set Natures    foo&bar|spam&ham|xyz&abc
+    ${obj_natures}=           Set Natures    foo&bar&xyz&abc
     Subscribe With Natures    ${natures}
     ${obj}=                   Make Object With Natures    ${obj_natures}
     Send Object               ${obj}

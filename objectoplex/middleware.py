@@ -168,6 +168,7 @@ class RoutedSystemClient(SystemClient):
         instance.extra_routing_ids = []
         instance.receive_mode = "none"
         instance.types = "all"
+        instance.natures = set()
         instance.subscribed = False
         instance.subscribed_to = False
 
@@ -286,6 +287,11 @@ class RoutingMiddleware(Middleware):
         client.server = False
         client.subscribed = True
 
+        client.natures = []
+        for nature_set in obj.metadata.get('natures', []):
+            # import pdb; pdb.set_trace()
+            client.natures.append(set(nature_set))
+
         notification = BusinessObject({ 'event': 'routing/subscribe/notification',
                                   'routing-id': client.routing_id }, None)
         # Send a registration reply
@@ -344,6 +350,7 @@ class RoutingMiddleware(Middleware):
             # print(obj.metadata)
             # print(self.should_route_to(obj, sender, recipient), recipient, recipient.routing_id)
             # print('---')
+
             if self.should_route_to(obj, sender, recipient)[0]:
                 recipient.send(obj, sender)
 
@@ -409,6 +416,24 @@ class RoutingMiddleware(Middleware):
             elif types == "all":
                 should = True
                 reason.append("types is all")
+
+        if should:
+            natures = recipient.natures
+
+            if len(natures) > 0:
+                part_of_a_set = False
+                object_natures = set(obj.metadata.get('natures', []))
+                for recipient_natures in natures:
+                    # import pdb; pdb.set_trace()
+                    if object_natures.issubset(recipient_natures):
+                        part_of_a_set = True
+                        break
+                if not part_of_a_set:
+                    should = False
+                    reason.append("not part of natures")
+                else:
+                    should = True
+                    reason.append("part of natures")
 
         return should, '; '.join(reason)
 
