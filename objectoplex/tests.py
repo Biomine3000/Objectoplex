@@ -154,25 +154,6 @@ class SubscriptionTestCase(SingleServerTestCase):
         self.assertValidReceiveAllReply(reply)
 
 
-class PingPongTestCase(SubscriptionTestCase):
-    def test_server_responds_to_ping_after_subscription(self):
-        self.make_send_subscription()
-
-        reply, time = reply_for_object(self.make_send_ping_object(), self.sock, select=select)
-        self.assertIsNotNone(reply)
-        self.assertIn('routing-id', reply.metadata)
-        self.assertIn('event', reply.metadata)
-        self.assertEquals(reply.metadata['event'], 'pong')
-
-    def test_server_shouldnt_respond_to_ping_before_subscription(self):
-        reply, time = reply_for_object(self.make_send_ping_object(), self.sock, select=select)
-        self.assertIsNone(reply)
-
-    def make_send_ping_object(self):
-        obj = BusinessObject({'event': 'ping'}, None)
-        obj.serialize(socket=self.sock)
-        return obj
-
 class ClientRegistryTestCase(SingleServerTestCase):
     def setUp(self):
         super(ClientRegistryTestCase, self).setUp()
