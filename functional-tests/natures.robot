@@ -97,7 +97,7 @@ Disconnect From Default Server
     Disconnect From Server
 
 Subscribe With Natures
-    [Arguments]    ${natures}
+    [Arguments]          ${natures}
     ${subscription}=     Make Subscription Object    ${natures}
     Send Object          ${subscription}
     ${reply}=            Receive Reply For    ${subscription}
