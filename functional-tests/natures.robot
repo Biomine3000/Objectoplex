@@ -21,7 +21,6 @@ Subscription With Natures
     Send Object          ${subscription}
     ${reply}=            Receive Reply For    ${subscription}
 
-
 # Single nature
 Receive Object With Requested Nature
     [Tags]    server    natures
@@ -40,7 +39,6 @@ Shouldn't Receive Object Without Requested Nature
     Send Object                   ${obj}
     Should Not Receive Object     ${obj}
 
-
 # Multiple natures
 Receive Object With Multiple Requested Natures
     [Tags]    server    natures
@@ -58,7 +56,6 @@ Shouldn't Receive Object Without Multiple Requested Natures
     ${obj}=                       Make Object With Natures    ${obj_natures}
     Send Object                   ${obj}
     Should Not Receive Object     ${obj}
-
 
 # Subsets
 Should Receive Object With Subset Of Requested Natures
