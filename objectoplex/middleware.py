@@ -288,9 +288,13 @@ class RoutingMiddleware(Middleware):
         client.subscribed = True
 
         client.natures = []
-        for nature_set in obj.metadata.get('natures', []):
+        for nature_list in obj.metadata.get('natures', []):
             # import pdb; pdb.set_trace()
-            client.natures.append(set(nature_set))
+            try:
+                nature_set = set(nature_list)
+                client.natures.append(nature_set)
+            except TypeError, e:
+                logger.warning("Couldn't add natures: {0}".format(e))
 
         notification = BusinessObject({ 'event': 'routing/subscribe/notification',
                                   'routing-id': client.routing_id }, None)
