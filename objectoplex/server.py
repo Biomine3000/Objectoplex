@@ -19,7 +19,7 @@ from gevent import sleep
 from gevent.select import select
 from gevent.queue import Queue, Empty
 
-from system import BusinessObject, ObjectType
+from system import BusinessObject, ObjectType, InvalidObject
 
 logger = logging.getLogger('server')
 
@@ -77,6 +77,9 @@ class Receiver(Greenlet):
                     logger.debug(u"<< {0}: {1}".format(client, obj))
                     client.gateway.send(obj, client)
                     last_activity = datetime.now()
+                except InvalidObject, ivo:
+                    client.close(u"{0}".format(ivo))
+                    return
                 except socket.error, e:
                     client.close(u"{0}".format(e))
                     return
