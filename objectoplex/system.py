@@ -11,22 +11,33 @@ from os.path import getsize
 from mimetypes import guess_type
 from email.utils import make_msgid
 from socket import socket as actual_socket
+from datetime import datetime, timedelta
 
 logger = logging.getLogger("system")
 
-def read_until_nul(socket):
+class InvalidObject(Exception): pass
+class CannotConvertToPython(Exception): pass
+
+_MAX_PAYLOAD_BYTES = 2048
+
+
+def read_until_nul(socket, last_activity_timeout_secs=5, read_timeout_secs=120):
+    started = datetime.now()
+    last_activity = datetime.now()
     ret = bytearray()
-    while True:
+    while len(ret) <= _MAX_PAYLOAD_BYTES:
+        now = datetime.now()
+        if now - timedelta(seconds=last_activity_timeout_secs) > last_activity or \
+           now - timedelta(seconds=read_timeout_secs) > started:
+            raise InvalidObject("Timed out reading metadata")
+
         char = socket.recv(1)
         if len(char) == 0 or char == '\x00':
             break
         ret.extend(char)
+        last_activity = now
 
     return ret
-
-
-class InvalidObject(Exception): pass
-class CannotConvertToPython(Exception): pass
 
 
 class ObjectType(object):
@@ -210,8 +221,10 @@ class BusinessObject(object):
         return BusinessObject(metadata_dict, contents)
 
     @classmethod
-    def read_from_socket(cls, socket):
-        metadata = read_until_nul(socket)
+    def read_from_socket(cls, socket, last_activity_timeout_secs=5, read_timeout_secs=120):
+        started = datetime.now()
+        last_activity = datetime.now()
+        metadata = read_until_nul(socket, last_activity_timeout_secs, read_timeout_secs)
         try:
             metadata = metadata.decode('utf-8')
             metadata_dict = json.loads(metadata)
@@ -220,7 +233,16 @@ class BusinessObject(object):
                 # logger.debug("Reading payload of size %i" % metadata_dict['size'])
                 payload = bytearray()
                 while len(payload) < metadata_dict['size']:
-                    payload.extend(socket.recv(metadata_dict['size'] - len(payload)))
+                    now = datetime.now()
+                    if now - timedelta(seconds=last_activity_timeout_secs) > last_activity or \
+                       now - timedelta(seconds=read_timeout_secs) > started:
+                        raise InvalidObject("Timed out while reading payload from %s" %
+                                            str(socket))
+
+                    received = socket.recv(metadata_dict['size'] - len(payload))
+                    if len(received) > 0:
+                        last_activity = now
+                    payload.extend(received)
 
                 assert(len(payload) == metadata_dict['size'])
             else:
@@ -229,6 +251,8 @@ class BusinessObject(object):
 
             return BusinessObject(metadata_dict, payload)
         except ValueError, ve:
+            if len(metadata) > 100:
+                metadata = metadata[0:75] + "..."
             logger.warning("Couldn't load JSON from '%s'" % metadata)
             return None
 
