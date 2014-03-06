@@ -9,7 +9,7 @@ import codecs
 import select
 import io
 
-from os.path import isdir, join
+from os.path import isdir, join, basename
 from os import listdir
 from optparse import OptionParser
 from mimetypes import guess_type
@@ -48,6 +48,31 @@ def send_item(item, sock):
                 break
     except KeyboardInterrupt, kbi:
         raise kbi
+
+def enhance_with_exif(metadata, path):
+    try:
+        import exifread
+    except:
+        return
+
+    with open(path, 'rb') as f:
+        tags = exifread.process_file(f)
+
+        attrs = {
+            "date": "EXIF DateTimeOriginal",
+            "iso": "EXIF ISOSpeedRatings",
+            "focal-length": "EXIF FocalLength",
+            "exposure": "EXIF Exposure",
+            "aperture": "EXIF MaxApertureValue",
+            "camera-make": "Image Make",
+            "camera-model": "Image Model"
+        }
+
+        for attr, key in attrs.iteritems():
+            if key not in tags:
+                continue
+            metadata[attr] = str(tags[key])
+
 
 def main():
     parser = OptionParser()
@@ -89,6 +114,9 @@ def main():
     while True:
         for item in items:
             obj = BusinessObject.from_file(item)
+            obj.metadata["natures"] = ["lookenspeepers", "photograph"]
+            obj.metadata["name"] = basename(item)
+            enhance_with_exif(obj.metadata, item)
             send_item(obj, sock)
             try:
                 logger.info(u"Sent {0}".format(item.encode('ascii', 'ignore')))
