@@ -10,14 +10,14 @@ Test Teardown    Disconnect From Default Server
 Should Respond To Ping
     [Tags]    server    ping
     Subscribe
-    ${ping}=                             Make Ping Object
+    ${ping}=                             Make Event           ping
     Send Object                          ${ping}
     ${pong}=                             Receive Reply For    ${ping}
     Object Should Have Key With Value    ${pong}              event    pong
 
 Should Not Respond To Ping Before Subscription
     [Tags]    server    ping
-    ${ping}=                        Make Ping Object
+    ${ping}=                        Make Event    ping
     Should Not Receive Reply For    ${ping}
 
 

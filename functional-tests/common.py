@@ -9,22 +9,41 @@ from robot.api import logger
 __all__ = ["make_subscription_object",
            "make_legacy_subscription_object",
            "make_object_with_natures",
+           "make_event",
+           "make_text_object",
+           "make_application_object",
            "set_natures",
-           "make_ping_object",
+           "parse_rules",
            "object_should_have_key",
            "object_should_have_key_with_value"]
 
 # Subscription
-def make_subscription_object():
-    result = subscription_object()
+def make_subscription_object(subscriptions=[]):
+    result = subscription_object(subscriptions=subscriptions)
     logger.info("Subscription object: " + str(result.metadata))
     return result
 
-# Ping object
-def make_ping_object():
-    return BusinessObject({'event': 'ping'}, None)
+# Events
+def make_event(event, natures=[]):
+    return BusinessObject({'event': event, 'natures': natures}, None)
 
-# Natures
+# Objects with payload
+def make_text_object(text, natures=[]):
+    result = BusinessObject.from_string(text)
+    result.metadata['natures'] = natures
+    return result
+
+def make_application_object(payload):
+    metadata_dict = {
+        'size': len(payload),
+        'type': "application/octet-stream"
+    }
+    return BusinessObject(metadata_dict, bytearray(payload, encoding='utf-8'))
+
+# Rules and natures
+def parse_rules(raw_rule):
+    return raw_rule.split(",")
+
 def make_object_with_natures(natures):
     return BusinessObject({'natures': natures[0]}, None)
 
@@ -51,7 +70,7 @@ def make_legacy_subscription_object():
     metadata = {
         'event': 'routing/subscribe',
         'receive-mode': 'all',
-        'types': 'all',
+        'types': 'all'
         }
     result = BusinessObject(metadata, None)
     logger.info("Subscription object: " + str(result.metadata))

@@ -66,12 +66,12 @@ def registration_object(client_name, user_name):
         }
     return BusinessObject(metadata, None)
 
-def subscription_object():
+def subscription_object(subscriptions=[], echo=False):
     metadata = {
         'event': 'routing/subscribe',
-        'receive-mode': 'all',
-        'types': 'all'
-        }
+        'subscriptions': subscriptions,
+        'echo': echo
+    }
     return BusinessObject(metadata, None)
 
 def format_readably(obj, file=None, no_payload=False, include=set(), exclude=set()):
