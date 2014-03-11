@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import json
 
+from os import environ as env
 from uuid import uuid4
 
 from robot.api import logger
@@ -21,10 +22,10 @@ def make_join_request():
     return BusinessObject({'event': 'services/request',
                            'name': 'clients',
                            'request': 'join',
-                           'client': str(uuid4()),
-                           'user': str(uuid4())}, None)
+                           'client': "ROBOT",
+                           'user': env['USER']}, None)
 
-def should_reply_with_correct_object(request, reply):
+def should_reply_with_correct_object(routing_id, request, reply):
     logger.info("Reply metadata: " + str(reply.metadata))
     payload_text = reply.payload.decode('utf-8')
     payload = json.loads(payload_text)
@@ -36,15 +37,15 @@ def should_reply_with_correct_object(request, reply):
     for dct in payload['clients']:
         if 'routing-id' not in dct:
             raise Exception("attribute 'routing-id' not in list item in clients list")
-        if dct['routing-id'] == self.routing_id:
+        if dct['routing-id'] == routing_id:
                 d = dct
                 break
 
     if d is None:
         raise Exception('Client not present in returned client listing')
 
-    if obj.metadata['client'] != d['client']:
+    if request.metadata['client'] != d['client']:
         raise Exception("attribute 'client' not equal")
 
-    if obj.metadata['user'] != d['user']:
+    if request.metadata['user'] != d['user']:
         raise Exception("attribute 'user' not equal")

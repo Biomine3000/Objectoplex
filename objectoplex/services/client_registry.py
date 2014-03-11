@@ -55,7 +55,7 @@ class ClientRegistry(Service):
             if 'route' in obj.metadata:
                 routing_id = obj.metadata['route'][0]
             else:
-                self.logger.warning(u"list request {0} with no and no route!".format(obj.metadata))
+                self.logger.warning(u"List request {0} with no and no route!".format(obj.metadata))
                 return
 
         clients = []
@@ -127,6 +127,7 @@ class ClientRegistry(Service):
 
         request = obj.metadata['request']
 
+        self.logger.info(u"Request: {0}".format(request))
         if request == 'join':
             return self.add_client(obj)
         elif request == 'leave':

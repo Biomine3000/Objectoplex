@@ -49,7 +49,6 @@ def reply_for_object(obj, sock, timeout_secs=1.0, select=select):
             else:
                 return reply, _total_seconds(took)
 
-
 def read_object_with_timeout(sock, timeout_secs=1.0, select=select):
     rlist, wlist, xlist = select.select([sock], [], [], timeout_secs)
 

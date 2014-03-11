@@ -18,7 +18,7 @@ Should Respond To Ping
 
 Should Not Respond To Ping Before Subscription
     [Tags]    server    ping
-    ${ping}=                        Make Event Object    ping
+    ${ping}=                        Make Event    ping
     Should Not Receive Reply For    ${ping}
 
 

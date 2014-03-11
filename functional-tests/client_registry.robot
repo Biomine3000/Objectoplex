@@ -17,14 +17,15 @@ Client Registry Service Should Reply
     Should Receive Reply For    ${obj}
 
 Reply Should Contain The Client In Client List
-    [Tags]    services    client_registry
-    Subscribe
-    ${obj}=                             Make Join Request
-    Send Object                         ${obj}
-    Should Receive Reply For            ${obj}
+    [Tags]    services    client_registry    wip
+    ${sub_reply}=                       Subscribe
+    ${join}=                            Make Join Request
+    Send Object                         ${join}
+    Should Receive Reply For            ${join}
     ${call}=                            Make List Request
-    ${reply}=                           Receive Reply For    ${call}
-    Should Reply With Correct Object    ${call}              ${reply}
+    Send Object                         ${call}
+    ${reply}=                           Receive Reply For                      ${call}
+    Should Reply With Correct Object    ${sub_reply.metadata['routing-id']}    ${join}    ${reply}
 
 
 *** Keywords ***
@@ -35,6 +36,7 @@ Disconnect From Default Server
     Disconnect From Server
 
 Subscribe
+    [Return]    ${reply}
     ${subscription}=     Make Subscription Object
     Send Object          ${subscription}
     ${reply}=            Receive Reply For    ${subscription}

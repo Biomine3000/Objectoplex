@@ -75,8 +75,8 @@ class Service(object):
 
     def subscribe(self):
         BusinessObject({ 'event': "routing/subscribe",
-                         'receive-mode': 'all',
-                         'types': 'all' },
+                         'echo': False,
+                         'subscriptions': ['@*'] },
                        None).serialize(socket=self.socket)
         self.logger.info("Subscribed to server")
 

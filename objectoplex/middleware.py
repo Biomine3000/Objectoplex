@@ -166,9 +166,8 @@ class RoutedSystemClient(SystemClient):
         instance.__class__ = cls
         instance.routing_id = make_routing_id(registration_object=obj)
         instance.extra_routing_ids = []
-        instance.receive_mode = "none"
-        instance.types = "all"
-        instance.natures = set()
+        instance.echo = False
+        instance.subscription = []
         instance.subscribed = False
         instance.subscribed_to = False
 
@@ -255,10 +254,9 @@ class RoutingMiddleware(Middleware):
 
     def handle_server_subscription(self, obj, client, clients):
         client.routing_id = obj.metadata['routing-id']
-
         client.extra_routing_ids = RoutingMiddleware.extra_routing_ids(obj)
-        client.receive_mode = obj.metadata.get('receive-mode', obj.metadata.get('receive_mode', 'none'))
-        client.types = obj.metadata.get('types', 'all')
+        client.subscriptions = obj.metadata.get('subscriptions', [])
+        client.echo = False
         client.subscribed = True
         client.server = True
 
@@ -282,8 +280,8 @@ class RoutingMiddleware(Middleware):
 
     def handle_client_subscription(self, obj, client, clients):
         client.extra_routing_ids = RoutingMiddleware.extra_routing_ids(obj)
-        client.receive_mode = obj.metadata.get('receive-mode', obj.metadata.get('receive_mode', 'none'))
-        client.types = obj.metadata.get('types', 'all')
+        client.subscriptions = obj.metadata.get('subscriptions', [])
+        client.echo = False
         client.server = False
         client.subscribed = True
 
@@ -383,63 +381,68 @@ class RoutingMiddleware(Middleware):
             if not recipient.has_routing_id(obj.metadata['to']):
                 return False, "recipient doesn't have routing id for to field"
 
-        receive_mode = recipient.receive_mode
-        types = recipient.types
+        if sender is recipient and recipient.echo == False:
+            return False, "no echo"
 
-        reason = []
-        should = None
+        return True, "trivial"
 
-        if receive_mode == "none":
-            should = False
-            reason.append('receive_mode is none')
+        # receive_mode = recipient.receive_mode
+        # types = recipient.types
 
-        elif receive_mode == "no_echo":
-            if sender is recipient:
-                should = False
-                reason.append('receive_mode is no_echo and sender is recipient')
-            else:
-                should = True
-                reason.append("receive_mode is no_echo and sender isn't recipient")
+        # reason = []
+        # should = None
 
-        elif receive_mode == "events_only":
-            if obj.event is not None:
-                should = True
-                reason.append("receive_mode is events_only and this is an event")
-            else:
-                should = False
-                reason.append("receive_mode is events_only and this is not an event")
+        # if receive_mode == "none":
+        #     should = False
+        #     reason.append('receive_mode is none')
 
-        elif receive_mode == "all":
-            reason.append("receive_mode is all")
-            should = True
+        # elif receive_mode == "no_echo":
+        #     if sender is recipient:
+        #         should = False
+        #         reason.append('receive_mode is no_echo and sender is recipient')
+        #     else:
+        #         should = True
+        #         reason.append("receive_mode is no_echo and sender isn't recipient")
 
-        if should:
-            if types == "none":
-                should = False
-                reason.append("types is none")
-            elif types == "all":
-                should = True
-                reason.append("types is all")
+        # elif receive_mode == "events_only":
+        #     if obj.event is not None:
+        #         should = True
+        #         reason.append("receive_mode is events_only and this is an event")
+        #     else:
+        #         should = False
+        #         reason.append("receive_mode is events_only and this is not an event")
 
-        if should:
-            natures = recipient.natures
+        # elif receive_mode == "all":
+        #     reason.append("receive_mode is all")
+        #     should = True
 
-            if len(natures) > 0:
-                part_of_a_set = False
-                object_natures = set(obj.metadata.get('natures', []))
-                for recipient_natures in natures:
-                    # import pdb; pdb.set_trace()
-                    if recipient_natures.issubset(object_natures):
-                        part_of_a_set = True
-                        break
-                if not part_of_a_set:
-                    should = False
-                    reason.append("not part of natures")
-                else:
-                    should = True
-                    reason.append("part of natures")
+        # if should:
+        #     if types == "none":
+        #         should = False
+        #         reason.append("types is none")
+        #     elif types == "all":
+        #         should = True
+        #         reason.append("types is all")
 
-        return should, '; '.join(reason)
+        # if should:
+        #     natures = recipient.natures
+
+        #     if len(natures) > 0:
+        #         part_of_a_set = False
+        #         object_natures = set(obj.metadata.get('natures', []))
+        #         for recipient_natures in natures:
+        #             # import pdb; pdb.set_trace()
+        #             if recipient_natures.issubset(object_natures):
+        #                 part_of_a_set = True
+        #                 break
+        #         if not part_of_a_set:
+        #             should = False
+        #             reason.append("not part of natures")
+        #         else:
+        #             should = True
+        #             reason.append("part of natures")
+
+        # return should, '; '.join(reason)
 
 
 class MOTDMiddleware(Middleware):
@@ -455,6 +458,10 @@ class MOTDMiddleware(Middleware):
 
 class LegacySubscriptionMiddleware(Middleware):
     def handle(self, obj, sender, clients):
+        if obj.event == 'routing/subscribe' and \
+           ('receive-mode' in obj.metadata or 'receive_mode' in obj.metadata):
+            return self.handle_legacy_subscription(obj, sender, clients)
+
         if obj.event == 'clients/register':
             return self.handle_legacy_registration(obj, sender, clients)
         return obj
@@ -479,7 +486,7 @@ class LegacySubscriptionMiddleware(Middleware):
         client.subscribed = True
         client.legacy = True
 
-        logger.info(u"Legacy client {0} subscribed!".format(client))
+        logger.info(u"Legacy client {0} subscribed (registered)!".format(client))
 
         if client.receive_mode != "none" and client.types != "none":
             client.send(BusinessObject({ 'event': 'clients/register/reply',
@@ -497,6 +504,54 @@ class LegacySubscriptionMiddleware(Middleware):
                                 'client': obj.metadata.get('name', 'no-client'),
                                 'user': obj.metadata.get('user', 'no-user'),
                                 'route': obj.metadata.get('route', []) }, None)
+
+    def handle_legacy_subscription(self, obj, sender, clients):
+        client = sender
+        RoutedSystemClient.promote(client, obj=obj)
+
+        receive_mode = obj.metadata.get('receive-mode', obj.metadata.get('receive_mode', 'none'))
+
+        echo = False
+        events_only = False
+        if receive_mode == "all":
+            echo = True
+        elif receive_mode == "events_only":
+            events_only = True
+
+        if 'route' in obj.metadata and len(obj.metadata['route']) > 1:
+            return obj
+
+        if 'routing-ids' in obj.metadata:
+            routing_ids = obj.metadata['routing-ids']
+            if isinstance(routing_ids, basestring):
+                logger.error(u"Got {0} as routing-ids from {1}".format(routing_ids, client))
+            else:
+                for routing_id in routing_ids:
+                    client.extra_routing_ids.append(routing_id)
+
+
+        client.subscription = []
+        if receive_mode == "all":
+            client.subscription = ['*']
+        elif receive_mode == "events_only":
+            client.subscription = ['@*']
+        client.echo = echo
+        client.subscribed = True
+
+        logger.info(u"Legacy client {0} subscribed!".format(client))
+
+        if receive_mode != "none" and obj.metadata['types'] != "none":
+            client.send(BusinessObject({ 'event': 'routing/subscribe/reply',
+                                         'routing-id': client.routing_id }, None), None)
+
+        notification = BusinessObject({ 'event': 'routing/subscribe/notification',
+                                        'routing-id': client.routing_id }, None)
+
+        for c in clients:
+            if c != client:
+                c.send(notification, None)
+
+        return None
 
 
 class PingPongMiddleware(Middleware):
