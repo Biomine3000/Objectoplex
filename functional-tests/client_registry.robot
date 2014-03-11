@@ -17,7 +17,7 @@ Client Registry Service Should Reply
     Should Receive Reply For    ${obj}
 
 Reply Should Contain The Client In Client List
-    [Tags]    services    client_registry    wip
+    [Tags]    services    client_registry
     ${sub_reply}=                       Subscribe
     ${join}=                            Make Join Request
     Send Object                         ${join}
