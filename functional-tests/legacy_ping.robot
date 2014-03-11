@@ -8,7 +8,7 @@ Test Teardown    Disconnect From Default Server
 
 *** Test Cases ***
 Should Respond To Ping
-    [Tags]    server    ping
+    [Tags]    server    ping    legacy
     Subscribe
     ${ping}=                             Make Event           ping
     Send Object                          ${ping}
@@ -16,8 +16,9 @@ Should Respond To Ping
     Object Should Have Key With Value    ${pong}              event    pong
 
 Should Not Respond To Ping Before Subscription
-    [Tags]    server    ping
+    [Tags]    server    ping    legacy
     ${ping}=                        Make Event    ping
+    Send Object                     ${ping}
     Should Not Receive Reply For    ${ping}
 
 

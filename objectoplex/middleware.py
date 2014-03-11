@@ -536,13 +536,15 @@ class LegacySubscriptionMiddleware(Middleware):
         elif receive_mode == "events_only":
             client.subscription = ['@*']
         client.echo = echo
+        client.legacy = True
         client.subscribed = True
 
         logger.info(u"Legacy client {0} subscribed!".format(client))
 
         if receive_mode != "none" and obj.metadata['types'] != "none":
             client.send(BusinessObject({ 'event': 'routing/subscribe/reply',
-                                         'routing-id': client.routing_id }, None), None)
+                                         'routing-id': client.routing_id,
+                                         'in-reply-to': obj.id }, None), None)
 
         notification = BusinessObject({ 'event': 'routing/subscribe/notification',
                                         'routing-id': client.routing_id }, None)
