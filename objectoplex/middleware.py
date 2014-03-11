@@ -381,10 +381,12 @@ class RoutingMiddleware(Middleware):
             if not recipient.has_routing_id(obj.metadata['to']):
                 return False, "recipient doesn't have routing id for to field"
 
-        if sender is recipient and recipient.echo == False:
-            return False, "no echo"
+        if sender is recipient and recipient.echo == True:
+            return True, "echo true"
 
         return True, "trivial"
+
+        # TODO: implement pseudo
 
         # receive_mode = recipient.receive_mode
         # types = recipient.types
