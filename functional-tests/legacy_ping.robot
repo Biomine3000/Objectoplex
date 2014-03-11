@@ -14,7 +14,6 @@ Should Respond To Ping
     Send Object                          ${ping}
     ${pong}=                             Receive Reply For    ${ping}
     Object Should Have Key With Value    ${pong}              event    pong
-    # Object Should Have Key With Value    ${pong}              in-reply-to    ${pong.id}
 
 Should Not Respond To Ping Before Subscription
     [Tags]    server    ping
@@ -30,6 +29,6 @@ Disconnect From Default Server
     Disconnect From Server
 
 Subscribe
-    ${subscription}=     Make Subscription Object
+    ${subscription}=     Make Legacy Subscription Object
     Send Object          ${subscription}
     ${reply}=            Receive Reply For    ${subscription}
