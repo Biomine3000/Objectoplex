@@ -185,4 +185,4 @@ Subscribe With Rules
 Subscribe
     [Arguments]          ${raw_rules}
     ${rules}=    Parse Rules    ${raw_rules}
-    Subscribe With Rules        ${raw_rules}
+    Subscribe With Rules        ${rules}

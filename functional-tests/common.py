@@ -42,7 +42,11 @@ def make_application_object(payload):
 
 # Rules and natures
 def parse_rules(raw_rule):
-    return raw_rule.split(",")
+    parts = raw_rule.split(",")
+    if isinstance(parts, basestring):
+        return [parts]
+    else:
+        return parts
 
 def make_object_with_natures(natures):
     return BusinessObject({'natures': natures[0]}, None)
