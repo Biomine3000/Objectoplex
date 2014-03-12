@@ -52,7 +52,7 @@ def match(matcher, matchable):
 
 
 def routing_decision(message, rules):
-    PASS = False # pass written in lowercase as it's a keyword in Python
+    PASS = False # pass written in lowercase is a keyword in Python
 
     for rule in rules:
         is_negative_rule = rule.startswith('!')
