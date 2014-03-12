@@ -36,9 +36,9 @@ Nothing
     ${subscription}=              Make Subscription Object
     Send Object                   ${subscription}
     ${reply}=                     Receive Reply For    ${subscription}
-    Object Should Have Key        ${reply}             subscription_rules
 
-    ${obj}=                       Make Object With Natures
+    ${obj_natures}=               Set Natures                 hasselhoff
+    ${obj}=                       Make Object With Natures    ${obj_natures}
     Send Object                   ${obj}
     Should Not Receive Object     ${obj}
 
