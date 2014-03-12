@@ -42,7 +42,7 @@ def match(matcher, matchable):
         if matcher_part == '*':
             return True
 
-        if len(matchable_parts) <= index:
+        if index >= len(matchable_parts):
             return False
         matchable_part = matchable_parts[index]
         if matcher_part != matchable_part:
