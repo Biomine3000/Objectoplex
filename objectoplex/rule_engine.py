@@ -71,7 +71,7 @@ def routing_decision(message, rules):
             if message.event is not None and match(rule, message.event): # message.event == rule:
                 PASS = not is_negative_rule
 
-        elif rule == '*' or rule == message.metadata.get('type', None):
+        elif rule == '*' or match(rule, message.metadata.get('type', None)):
             PASS = not is_negative_rule
 
     return PASS
