@@ -31,6 +31,26 @@ function message_passed_by_subscription_rules(msg, subscription_rules)
 end
 """
 
+def match(matcher, matchable):
+    if matcher is None or matchable is None:
+        return False
+
+    matcher_parts = matcher.split('/')
+    matchable_parts = matchable.split('/')
+
+    for index, matcher_part in enumerate(matcher_parts):
+        if matcher_part == '*':
+            return True
+
+        if len(matchable_parts) <= index:
+            return False
+        matchable_part = matchable_parts[index]
+        if matcher_part != matchable_part:
+            return False
+
+    return True
+
+
 def routing_decision(message, rules):
     PASS = False # pass written in lowercase as it's a keyword in Python
 
@@ -42,13 +62,13 @@ def routing_decision(message, rules):
         if rule.startswith('#'):
             rule = rule[1:]
             for nature in message.metadata.get('natures', []):
-                if nature == rule:
+                if match(rule, nature): # nature == rule:
                     PASS = not is_negative_rule
                     break
 
         elif rule.startswith('@'):
             rule = rule[1:]
-            if message.event is not None and message.event == rule:
+            if message.event is not None and match(rule, message.event): # message.event == rule:
                 PASS = not is_negative_rule
 
         elif rule == '*' or rule == message.metadata.get('type', None):
