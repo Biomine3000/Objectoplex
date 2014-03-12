@@ -13,6 +13,7 @@ from random import choice
 
 from system import BusinessObject
 from server import SystemClient
+from rule_engine import routing_decision
 
 logger = logging.getLogger('middleware')
 
@@ -285,17 +286,8 @@ class RoutingMiddleware(Middleware):
         client.server = False
         client.subscribed = True
 
-        client.natures = []
-        for nature_list in obj.metadata.get('natures', []):
-            # import pdb; pdb.set_trace()
-            try:
-                nature_set = set(nature_list)
-                client.natures.append(nature_set)
-            except TypeError, e:
-                logger.warning("Couldn't add natures: {0}".format(e))
-
         notification = BusinessObject({ 'event': 'routing/subscribe/notification',
-                                  'routing-id': client.routing_id }, None)
+                                        'routing-id': client.routing_id }, None)
         # Send a registration reply
         client.send(BusinessObject({ 'event': 'routing/subscribe/reply',
                                      'routing-id': client.routing_id,
@@ -384,67 +376,8 @@ class RoutingMiddleware(Middleware):
         if sender is recipient and recipient.echo == True:
             return True, "echo true"
 
-        return True, "trivial"
-
-        # TODO: implement pseudo
-
-        # receive_mode = recipient.receive_mode
-        # types = recipient.types
-
-        # reason = []
-        # should = None
-
-        # if receive_mode == "none":
-        #     should = False
-        #     reason.append('receive_mode is none')
-
-        # elif receive_mode == "no_echo":
-        #     if sender is recipient:
-        #         should = False
-        #         reason.append('receive_mode is no_echo and sender is recipient')
-        #     else:
-        #         should = True
-        #         reason.append("receive_mode is no_echo and sender isn't recipient")
-
-        # elif receive_mode == "events_only":
-        #     if obj.event is not None:
-        #         should = True
-        #         reason.append("receive_mode is events_only and this is an event")
-        #     else:
-        #         should = False
-        #         reason.append("receive_mode is events_only and this is not an event")
-
-        # elif receive_mode == "all":
-        #     reason.append("receive_mode is all")
-        #     should = True
-
-        # if should:
-        #     if types == "none":
-        #         should = False
-        #         reason.append("types is none")
-        #     elif types == "all":
-        #         should = True
-        #         reason.append("types is all")
-
-        # if should:
-        #     natures = recipient.natures
-
-        #     if len(natures) > 0:
-        #         part_of_a_set = False
-        #         object_natures = set(obj.metadata.get('natures', []))
-        #         for recipient_natures in natures:
-        #             # import pdb; pdb.set_trace()
-        #             if recipient_natures.issubset(object_natures):
-        #                 part_of_a_set = True
-        #                 break
-        #         if not part_of_a_set:
-        #             should = False
-        #             reason.append("not part of natures")
-        #         else:
-        #             should = True
-        #             reason.append("part of natures")
-
-        # return should, '; '.join(reason)
+        decision = routing_decision(obj, recipient.subscriptions)
+        return decision, "decision made by rule_engine.routing_decision"
 
 
 class MOTDMiddleware(Middleware):
