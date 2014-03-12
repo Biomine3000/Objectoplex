@@ -46,7 +46,7 @@ def parse_rules(raw_rule):
     if isinstance(parts, basestring):
         return [parts]
     else:
-        return parts
+        return [part.strip() for part in parts]
 
 def make_object_with_natures(natures):
     return BusinessObject({'natures': natures[0]}, None)
