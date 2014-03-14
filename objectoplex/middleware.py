@@ -444,15 +444,6 @@ class LegacySubscriptionMiddleware(Middleware):
         client = sender
         RoutedSystemClient.promote(client, obj=obj)
 
-        receive_mode = obj.metadata.get('receive-mode', obj.metadata.get('receive_mode', 'none'))
-
-        echo = False
-        events_only = False
-        if receive_mode == "all":
-            echo = True
-        elif receive_mode == "events_only":
-            events_only = True
-
         if 'route' in obj.metadata and len(obj.metadata['route']) > 1:
             return obj
 
@@ -464,13 +455,20 @@ class LegacySubscriptionMiddleware(Middleware):
                 for routing_id in routing_ids:
                     client.extra_routing_ids.append(routing_id)
 
+        # receive-mode handling
+        receive_mode = obj.metadata.get('receive-mode', obj.metadata.get('receive_mode', 'none'))
 
-        client.subscription = []
-        if receive_mode == "all":
-            client.subscription = ['*']
-        elif receive_mode == "events_only":
-            client.subscription = ['@*']
-        client.echo = echo
+        if receive_mode == "no_echo":
+            client.echo = False
+        else:
+            client.echo = True
+
+        client.subscriptions = []
+        if receive_mode == "events_only":
+            client.subscriptions = ['@*']
+        else:
+            client.subscriptions = ['*']
+
         client.legacy = True
         client.subscribed = True
 
