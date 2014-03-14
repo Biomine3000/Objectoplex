@@ -77,7 +77,7 @@ def main():
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect((opts.host, opts.port))
 
-    subscription_object().serialize(socket=sock)
+    subscription_object(['*']).serialize(socket=sock)
     registration_object(sys.argv[0], env['USER']).serialize(socket=sock)
     try:
         while True:
