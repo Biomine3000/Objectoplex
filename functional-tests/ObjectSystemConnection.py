@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 import socket
 
+from datetime import datetime, timedelta
+
 from objectoplex import reply_for_object
 from objectoplex.utils import read_object_with_timeout
 
@@ -12,7 +14,7 @@ from robot.api import logger
 
 __all__ = ["ObjectSystemConnection"]
 
-TIMEOUT = 1
+TIMEOUT_SECS = 1
 
 
 class ObjectSystemConnection(object):
@@ -28,7 +30,7 @@ class ObjectSystemConnection(object):
         obj.serialize(self.sock)
 
     def receive_reply_for(self, obj):
-        reply, _ = reply_for_object(obj, self.sock, timeout_secs=TIMEOUT)
+        reply, _ = reply_for_object(obj, self.sock, timeout_secs=TIMEOUT_SECS)
         if reply is None:
             raise Exception("Didn't receive reply for object")
         return reply
@@ -37,24 +39,27 @@ class ObjectSystemConnection(object):
         return self.receive_reply_for(obj)
 
     def should_not_receive_reply_for(self, obj):
-        for i in xrange(TIMEOUT):
+        for i in xrange(TIMEOUT_SECS):
             reply, _ = reply_for_object(obj, self.sock, timeout_secs=1.0)
             if reply is not None:
                 raise Exception("Unexpectedly received reply for object")
 
     def should_receive_object(self, obj):
-        for i in xrange(TIMEOUT):
-            incoming = read_object_with_timeout(self.sock, timeout_secs=1.0)
+        deadline = datetime.now() + timedelta(seconds=TIMEOUT_SECS)
+        while datetime.now() < deadline:
+            incoming = read_object_with_timeout(self.sock, timeout_secs=0.1)
             if incoming is not None:
                 logger.info("Received " + str(incoming.metadata))
             else:
                 logger.info("Received " + str(incoming))
+
             if incoming is not None and incoming.id == obj.id:
                 return
         raise Exception("Didn't receive expected object: " + str(obj.metadata))
 
     def should_not_receive_object(self, obj):
-        for i in xrange(TIMEOUT):
+        deadline = datetime.now() + timedelta(seconds=TIMEOUT_SECS)
+        while datetime.now() < deadline:
             incoming = read_object_with_timeout(self.sock, timeout_secs=1.0)
             if incoming is not None:
                 logger.info("Received " + str(incoming.metadata))

@@ -373,8 +373,8 @@ class RoutingMiddleware(Middleware):
             if not recipient.has_routing_id(obj.metadata['to']):
                 return False, "recipient doesn't have routing id for to field"
 
-        if sender is recipient and recipient.echo == True:
-            return True, "echo true"
+        if sender is recipient and recipient.echo is True:
+            return False, "echo false"
 
         decision = routing_decision(obj, recipient.subscriptions)
         return decision, "decision made by rule_engine.routing_decision"

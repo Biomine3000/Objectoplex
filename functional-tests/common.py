@@ -19,7 +19,7 @@ __all__ = ["make_subscription_object",
 
 # Subscription
 def make_subscription_object(subscriptions=[]):
-    result = subscription_object(subscriptions=subscriptions)
+    result = subscription_object(subscriptions=subscriptions, echo=True)
     logger.info("Subscription object: " + str(result.metadata))
     return result
 
