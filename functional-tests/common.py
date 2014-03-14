@@ -12,7 +12,7 @@ __all__ = ["make_subscription_object",
            "make_event",
            "make_text_object",
            "make_application_object",
-           "set_natures",
+           "parse_natures",
            "parse_rules",
            "object_should_have_key",
            "object_should_have_key_with_value"]
@@ -51,9 +51,8 @@ def parse_rules(raw_rule):
 def make_object_with_natures(natures):
     return BusinessObject({'natures': natures[0]}, None)
 
-def set_natures(expr):
-    ors = expr.split('|')
-    return [o.split('&') for o in ors]
+def parse_natures(expr):
+    return [item.strip() for item in expr.split(',')]
 
 # Common test keywords
 def object_should_have_key(obj, key):

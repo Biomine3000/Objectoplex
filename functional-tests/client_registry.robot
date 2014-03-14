@@ -37,6 +37,6 @@ Disconnect From Default Server
 
 Subscribe
     [Return]    ${reply}
-    ${subscription}=     Make Subscription Object
+    ${subscription}=     Make Subscription Object    !*, @services/*
     Send Object          ${subscription}
-    ${reply}=            Receive Reply For    ${subscription}
+    ${reply}=            Receive Reply For           ${subscription}

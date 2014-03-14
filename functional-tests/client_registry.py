@@ -13,17 +13,17 @@ __all__ = ["should_reply_with_correct_object",
            "make_join_request"]
 
 
-def make_list_request():
-    return BusinessObject({'event': 'services/request',
-                           'name': 'clients',
-                           'request': 'list'}, None)
-
 def make_join_request():
     return BusinessObject({'event': 'services/request',
                            'name': 'clients',
                            'request': 'join',
                            'client': "ROBOT",
                            'user': env['USER']}, None)
+
+def make_list_request():
+    return BusinessObject({'event': 'services/request',
+                           'name': 'clients',
+                           'request': 'list'}, None)
 
 def should_reply_with_correct_object(routing_id, request, reply):
     logger.info("Reply metadata: " + str(reply.metadata))

@@ -37,7 +37,7 @@ Nothing
     Send Object                   ${subscription}
     ${reply}=                     Receive Reply For    ${subscription}
 
-    ${obj_natures}=               Set Natures                 hasselhoff
+    ${obj_natures}=               Parse Natures               hasselhoff
     ${obj}=                       Make Object With Natures    ${obj_natures}
     Send Object                   ${obj}
     Should Not Receive Object     ${obj}
@@ -51,7 +51,7 @@ All
     ${rules}=                   Parse Rules                 *
     Subscribe With Rules        ${rules}
 
-    ${obj_natures}=             Set Natures                 hasselhoff
+    ${obj_natures}=             Parse Natures               hasselhoff
     ${obj}=                     Make Object With Natures    ${obj_natures}
     Send Object                 ${obj}
     Should Receive Object       ${obj}
@@ -61,7 +61,7 @@ Only Events
     [Tags]    server    rules
     Subscribe                     @*
 
-    ${obj_natures}=               Set Natures                 hasselhoff
+    ${obj_natures}=               Parse Natures               hasselhoff
     ${obj}=                       Make Object With Natures    ${obj_natures}
     Send Object                   ${obj}
     Should Not Receive Object     ${obj}
@@ -75,7 +75,7 @@ Everything But Events
     [Tags]    server    rules
     Subscribe                     *, !@*
 
-    ${obj_natures}=               Set Natures                 hasselhoff
+    ${obj_natures}=               Parse Natures               hasselhoff
     ${obj}=                       Make Object With Natures    ${obj_natures}
     Send Object                   ${obj}
     Should Receive Object         ${obj}
@@ -89,7 +89,7 @@ Texts And Events
     [Tags]    server    rules
     Subscribe                     text/*, @*
 
-    ${obj_natures}=               Set Natures                 hasselhoff
+    ${obj_natures}=               Parse Natures               hasselhoff
     ${obj}=                       Make Object With Natures    ${obj_natures}
     Send Object                   ${obj}
     Should Not Receive Object     ${obj}
@@ -111,7 +111,7 @@ Texts Not Having Hasselhoff Nature And Events With Hasselhoff Nature
     [Tags]    server    rules
     Subscribe                     text/*, !\#hasselhoff, @*
 
-    ${hoff_natures}=              Set Natures                 hasselhoff
+    ${hoff_natures}=              Parse Natures               hasselhoff
 
     ${obj}=                       Make Text Object            gonzo            ${hoff_natures}
     Send Object                   ${obj}
@@ -134,7 +134,7 @@ Texts And Events Without Hasselhoff Natures
     [Tags]    server    rules
     Subscribe                     text/*, @*, !\#hasselhoff
 
-    ${hoff_natures}=              Set Natures                 hasselhoff
+    ${hoff_natures}=              Parse Natures               hasselhoff
     ${obj1}=                      Make Text Object            gonzo            ${hoff_natures}
     Send Object                   ${obj1}
     Should Not Receive Object     ${obj1}
@@ -154,7 +154,7 @@ Everything Except Texts Unless They Have Hasselhoff Nature
     [Tags]    server    rules
     Subscribe                     *, !text/*, \#hasselhoff
 
-    ${hoff_natures}=              Set Natures                 hasselhoff
+    ${hoff_natures}=              Parse Natures               hasselhoff
 
     ${app_obj}=                   Make Application Object     gonzo
     Send Object                   ${app_obj}
