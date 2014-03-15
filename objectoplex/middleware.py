@@ -178,7 +178,7 @@ def make_server_subscription(routing_id):
                 'routing-id': routing_id,
                 'subscriptions': ['*'],
                 'name': 'Objectoplex',
-                'user': env['USER']
+                'user': env.get('USER', 'unknown-user')
                 }
     return BusinessObject(metadata, None)
 
