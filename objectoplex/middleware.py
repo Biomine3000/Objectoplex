@@ -168,7 +168,7 @@ class RoutedSystemClient(SystemClient):
         instance.routing_id = make_routing_id(registration_object=obj)
         instance.extra_routing_ids = []
         instance.echo = False
-        instance.subscription = []
+        instance.subscriptions = []
         instance.subscribed = False
         instance.subscribed_to = False
 
@@ -176,8 +176,7 @@ def make_server_subscription(routing_id):
     metadata = {'event': 'routing/subscribe',
                 'role': 'server',
                 'routing-id': routing_id,
-                'receive': 'all',
-                'subscriptions': 'all',
+                'subscriptions': ['*'],
                 'name': 'Objectoplex',
                 'user': env['USER']
                 }
@@ -250,16 +249,18 @@ class RoutingMiddleware(Middleware):
             return
         subscription = make_server_subscription(self.routing_id)
         client.send(subscription, None)
+        client.subscriptions = ['*']
+        client.echo = False
         client.subscribed_to = True
         logger.info(u"Subscribed to server {0}".format(client))
 
     def handle_server_subscription(self, obj, client, clients):
         client.routing_id = obj.metadata['routing-id']
         client.extra_routing_ids = RoutingMiddleware.extra_routing_ids(obj)
-        client.subscriptions = obj.metadata.get('subscriptions', [])
+        client.subscriptions = obj.metadata.get('subscriptions', ['*'])
         client.echo = False
-        client.subscribed = True
         client.server = True
+        client.subscribed = True
 
         self.subscribe_to_server(client)
 
@@ -269,8 +270,8 @@ class RoutingMiddleware(Middleware):
                                      'role': 'server' }, None), None)
 
         notification = BusinessObject({ 'event': 'routing/subscribe/notification',
-                                  'routing-id': client.routing_id,
-                                  'role': 'server' }, None)
+                                        'routing-id': client.routing_id,
+                                        'role': 'server' }, None)
 
         for c in clients:
             if c != client:
@@ -363,7 +364,7 @@ class RoutingMiddleware(Middleware):
                 if sender.routing_id in obj.metadata['route']:
                     return False, 'routing/* and sender.routing_id in route'
 
-        if recipient.server:
+        if recipient.server is True:
             return True, 'recipient is server'
 
         if obj.metadata.get('event', '').startswith('routing/announcement/'):
