@@ -55,8 +55,7 @@ def main():
         }
 
     obj = BusinessObject(metadata, payload)
-    subscription = subscription_object()
-    subscription.metadata['receive-mode'] = 'no_echo'
+    subscription = subscription_object(subscriptions=['@*'])
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect((opts.host, opts.port))
